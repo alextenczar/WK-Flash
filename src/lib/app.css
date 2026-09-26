@@ -1,0 +1,86 @@
+:root {
+	color-scheme: light dark;
+	--bg: #12141a;
+	--surface: #1c1f28;
+	--surface-alt: #262a36;
+	--border: #333747;
+	--text: #eef0f5;
+	--muted: #9aa1b3;
+	--accent: #5b8cff;
+	--accent-hover: #7ba0ff;
+	--good: #3fbf6a;
+	--bad: #e5484d;
+	font-family:
+		system-ui,
+		-apple-system,
+		'Segoe UI',
+		sans-serif;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	min-height: 100vh;
+}
+
+a {
+	color: var(--accent);
+}
+
+button {
+	font-family: inherit;
+	font-size: 1rem;
+	cursor: pointer;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--surface-alt);
+	color: var(--text);
+	padding: 0.6rem 1.1rem;
+	transition: background-color 0.15s ease;
+}
+
+button:hover:not(:disabled) {
+	background: var(--border);
+}
+
+button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+button.primary {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: #fff;
+}
+
+button.primary:hover:not(:disabled) {
+	background: var(--accent-hover);
+}
+
+input[type='text'],
+input[type='password'] {
+	font-family: inherit;
+	font-size: 1rem;
+	padding: 0.6rem 0.8rem;
+	border-radius: 8px;
+	border: 1px solid var(--border);
+	background: var(--surface);
+	color: var(--text);
+}
+
+input:focus {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+
+.container {
+	max-width: 720px;
+	margin: 0 auto;
+	padding: 1.5rem;
+}
