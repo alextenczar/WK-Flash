@@ -3,7 +3,14 @@
 	import { onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
 	import { keybindings } from '$lib/keybindings';
-	import { showMnemonics, showPartsOfSpeech, showSrsChanges } from '$lib/review-preferences';
+	import {
+		prioritizeCurrentLevel,
+		reviewSort,
+		showMnemonics,
+		showPartsOfSpeech,
+		showSrsChanges,
+		sortReviewCards
+	} from '$lib/review-preferences';
 	import { reviewAudioSettings } from '$lib/review-audio';
 	import { clearReviewSession, readReviewSession, saveReviewSession } from '$lib/review-session';
 	import {
@@ -162,9 +169,17 @@ function withoutQueuedSubmissions(cards: ReviewCard[]): ReviewCard[] {
 	return cards.filter((card) => !queuedIds.has(card.assignmentId));
 }
 
+function addCachedUserLevel(cards: ReviewCard[], userLevel: number): ReviewCard[] {
+	return cards.map((card) =>
+		card.currentUserLevel === undefined ? { ...card, currentUserLevel: userLevel } : card
+	);
+}
+
 async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	const cachedQueue = await getCachedReviewQueue();
-	const cachedCards = cachedQueue ? withoutQueuedSubmissions(cachedQueue.cards) : null;
+	const cachedCards = cachedQueue
+		? addCachedUserLevel(withoutQueuedSubmissions(cachedQueue.cards), cachedQueue.user.level)
+		: null;
 	if (!navigator.onLine) {
 		if (cachedCards) return cachedCards;
 		throw new WaniKaniError('No offline review queue is saved on this device. Connect once to preload reviews.', 0);
@@ -188,7 +203,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			const newCards = availableCards.filter((card) => !knownAssignmentIds.has(card.assignmentId));
 			if (newCards.length === 0) return;
 
-			queue = [...queue, ...shuffle(newCards)];
+			queue = [...queue, ...sortReviewCards(newCards, $reviewSort, $prioritizeCurrentLevel)];
 			const nextKnownIds = new Set(knownAssignmentIds);
 			const nextPendingIds = new Set(pendingIds);
 			for (const card of newCards) {
@@ -204,15 +219,6 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		}
 	}
 
-	function shuffle<T>(arr: T[]): T[] {
-		const copy = [...arr];
-		for (let i = copy.length - 1; i > 0; i--) {
-			const j = Math.floor(Math.random() * (i + 1));
-			[copy[i], copy[j]] = [copy[j], copy[i]];
-		}
-		return copy;
-	}
-
 	async function load() {
 		phase = 'loading';
 		error = '';
@@ -224,7 +230,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				clearReviewSession();
 				return;
 			}
-			queue = shuffle(cards);
+			queue = sortReviewCards(cards, $reviewSort, $prioritizeCurrentLevel);
 			totalUnique = queue.length;
 			knownAssignmentIds = new Set(queue.map((card) => card.assignmentId));
 			pendingIds = new Set(queue.map((c) => c.assignmentId));

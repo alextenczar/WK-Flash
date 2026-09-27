@@ -177,6 +177,16 @@ export async function getCachedReviewQueue(): Promise<CachedReviewQueue | null> 
 	}
 }
 
+export async function clearCachedReviewQueue(): Promise<void> {
+	const cache = await openSubjectCache();
+	if (!cache) return;
+	try {
+		await cache.delete(reviewQueueCacheRequest());
+	} catch {
+		// Cache cleanup should not prevent changing API keys.
+	}
+}
+
 async function cacheReviewQueue(
 	cards: ReviewCard[],
 	user: WKUser,
@@ -455,7 +465,8 @@ async function getAccessibleReviewData(apiToken: string): Promise<{
 function reviewCardsFromData(
 	assignments: WKAssignment[],
 	subjectById: Map<number, WKSubject>,
-	maxAccessibleLevel: number
+	maxAccessibleLevel: number,
+	currentUserLevel: number
 ): ReviewCard[] {
 	return assignments.flatMap((assignment) => {
 		const subject = subjectById.get(assignment.data.subject_id);
@@ -464,6 +475,7 @@ function reviewCardsFromData(
 			assignmentId: assignment.id,
 			srsStage: assignment.data.srs_stage,
 			maxAccessibleLevel,
+			currentUserLevel,
 			subject,
 			needsReading: subject.object !== 'radical' && subject.object !== 'kana_vocabulary',
 			incorrectCount: 0
@@ -485,7 +497,7 @@ export async function getReviewOverview(apiToken: string): Promise<{
 	const nextReviewBatch = nextBatch === undefined
 		? (await getCachedReviewQueue())?.nextReviewBatch
 		: nextBatch;
-	const cards = reviewCardsFromData(assignments, subjectById, maxAccessibleLevel);
+	const cards = reviewCardsFromData(assignments, subjectById, maxAccessibleLevel, user.level);
 	await cacheReviewQueue(cards, user, reviewCount, nextReviewBatch);
 	return { user, reviewCount, cards, nextReviewBatch };
 }
@@ -510,7 +522,7 @@ async function getNextReviewBatch(apiToken: string): Promise<NextReviewBatch | n
 /** Builds the combined meaning+reading review queue for every currently available review. */
 export async function buildReviewQueue(apiToken: string): Promise<ReviewCard[]> {
 	const { user, assignments, reviewCount, subjectById, maxAccessibleLevel } = await getAccessibleReviewData(apiToken);
-	const cards = reviewCardsFromData(assignments, subjectById, maxAccessibleLevel);
+	const cards = reviewCardsFromData(assignments, subjectById, maxAccessibleLevel, user.level);
 	await cacheReviewQueue(cards, user, reviewCount);
 	return cards;
 }

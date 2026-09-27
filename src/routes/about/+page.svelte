@@ -39,6 +39,10 @@
 				<p>Customize review keybindings, show or hide mnemonics and parts of speech, and adjust pronunciation playback and volume.</p>
 			</li>
 			<li>
+				<h3>Review sorting</h3>
+				<p>Order new reviews by SRS stage, WaniKani level, or item type; keep WaniKani's default order or shuffle randomly. You can also prioritize items from your current level.</p>
+			</li>
+			<li>
 				<h3>SRS feedback and review planning</h3>
 				<p>See SRS stage changes after answers, review counts due, and the next scheduled review batch.</p>
 			</li>

@@ -2,10 +2,18 @@
 	import { goto } from '$app/navigation';
 	import { keybindings, type Keybindings } from '$lib/keybindings';
 	import { apiKey } from '$lib/storage';
-	import { showMnemonics, showPartsOfSpeech, showSrsChanges } from '$lib/review-preferences';
+	import {
+		prioritizeCurrentLevel,
+		reviewSort,
+		reviewSortOptions,
+		showMnemonics,
+		showPartsOfSpeech,
+		showSrsChanges,
+		type ReviewSortOrder
+	} from '$lib/review-preferences';
 	import { clearReviewSession } from '$lib/review-session';
 	import { reviewAudioSettings } from '$lib/review-audio';
-	import { getUser, WaniKaniError } from '$lib/wanikani/api';
+	import { clearCachedReviewQueue, getUser, WaniKaniError } from '$lib/wanikani/api';
 
 	let input = $state($apiKey);
 	let checking = $state(false);
@@ -45,7 +53,10 @@
 		checking = true;
 		try {
 			const user = await getUser(value);
-			if ($apiKey !== value) clearReviewSession();
+			if ($apiKey !== value) {
+				clearReviewSession();
+				await clearCachedReviewQueue();
+			}
 			apiKey.set(value);
 			success = `Connected as ${user.username}. Redirecting...`;
 			setTimeout(() => goto('/'), 800);
@@ -58,6 +69,7 @@
 
 	function clear() {
 		clearReviewSession();
+		void clearCachedReviewQueue();
 		apiKey.clear();
 		input = '';
 		success = '';
@@ -93,6 +105,27 @@
 			{/if}
 		</div>
 	</form>
+
+	<section class="preferences" aria-labelledby="review-sort-heading">
+		<h2 id="review-sort-heading">Review order</h2>
+		<label class="review-sort-setting" for="review-sort">
+			<span>Sort due reviews</span>
+			<select id="review-sort" value={$reviewSort} onchange={(event) => reviewSort.set(event.currentTarget.value as ReviewSortOrder)}>
+				{#each reviewSortOptions as option (option.value)}
+					<option value={option.value}>{option.label}</option>
+				{/each}
+			</select>
+		</label>
+		<label class="toggle">
+			<input
+				type="checkbox"
+				checked={$prioritizeCurrentLevel}
+				onchange={(event) => prioritizeCurrentLevel.set(event.currentTarget.checked)}
+			/>
+			Prioritize items from my current WaniKani level
+		</label>
+		<p class="muted">Current-level items come first; the selected sort applies within each group. New queues and newly due items use these settings; saved sessions keep their current order.</p>
+	</section>
 
 	<section class="preferences">
 		<h2>Review preferences</h2>
@@ -245,6 +278,25 @@
 		width: 1.1rem;
 		height: 1.1rem;
 		accent-color: var(--accent);
+	}
+
+	.review-sort-setting {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+
+	.review-sort-setting + .toggle {
+		margin-top: 1rem;
+	}
+
+	.review-sort-setting select {
+		padding: 0.6rem 0.8rem;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface);
+		color: var(--text);
+		font: inherit;
 	}
 
 	.volume-setting {

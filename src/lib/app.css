@@ -117,6 +117,12 @@ html {
 
 a {
 	color: var(--accent);
+	text-decoration: none;
+}
+
+a:hover,
+a:focus-visible {
+	text-decoration: underline;
 }
 
 button {

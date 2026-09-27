@@ -60,6 +60,7 @@ export interface ReviewCard {
 	assignmentId: number;
 	srsStage?: number;
 	maxAccessibleLevel?: number;
+	currentUserLevel?: number;
 	subject: WKSubject;
 	needsReading: boolean;
 	incorrectCount: number;
