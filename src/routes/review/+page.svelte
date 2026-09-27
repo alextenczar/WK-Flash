@@ -22,6 +22,7 @@
 	let moreInfoError = $state('');
 	let moreInfoLoadedFor = $state<number | null>(null);
 	let relatedSubjects = $state<WKSubject[]>([]);
+	let detailSubject = $state<WKSubject | null>(null);
 
 	let queue = $state<ReviewCard[]>([]);
 	let totalUnique = $state(0);
@@ -43,6 +44,7 @@
 		moreInfoError = '';
 		moreInfoLoadedFor = null;
 		relatedSubjects = [];
+		detailSubject = null;
 	}
 
 	async function toggleMoreInfo() {
@@ -59,11 +61,17 @@
 			: subject.object === 'radical'
 				? (subject.data.amalgamation_subject_ids ?? [])
 				: [];
-		const uniqueIds = [...new Set(relatedIds)].filter((id) => id !== subject.id);
+		const isVocabulary = subject.object === 'vocabulary' || subject.object === 'kana_vocabulary';
+		const subjectIds = [
+			...relatedIds.filter((id) => id !== subject.id),
+			...(isVocabulary ? [subject.id] : [])
+		];
+		const uniqueIds = [...new Set(subjectIds)];
 
 		moreInfoError = '';
 		if (uniqueIds.length === 0) {
 			relatedSubjects = [];
+			detailSubject = subject;
 			moreInfoLoadedFor = subject.id;
 			return;
 		}
@@ -72,7 +80,8 @@
 		try {
 			const fetchedSubjects = await getSubjectsByIds($apiKey, uniqueIds);
 			if (current?.subject.id !== subject.id) return;
-			relatedSubjects = fetchedSubjects;
+			detailSubject = fetchedSubjects.find((item) => item.id === subject.id) ?? subject;
+			relatedSubjects = fetchedSubjects.filter((item) => item.id !== subject.id);
 			moreInfoLoadedFor = subject.id;
 		} catch {
 			if (current?.subject.id === subject.id) moreInfoError = 'Could not load related WaniKani items.';
@@ -486,13 +495,13 @@
 										<p class="muted">No kanji listed for this radical.</p>
 									{/if}
 								</section>
-							{:else if current.subject.data.context_sentences?.length}
+							{:else if (detailSubject ?? current.subject).data.context_sentences?.length}
 								<section>
 									<h3>Example sentences</h3>
-									{#each current.subject.data.context_sentences as sentence, index (`${sentence.japanese}-${index}`)}
+									{#each (detailSubject ?? current.subject).data.context_sentences ?? [] as sentence, index (`${sentence.ja}-${index}`)}
 										<div class="context-sentence">
-											<p lang="ja">{sentence.japanese}</p>
-											<p>{sentence.english}</p>
+											<p lang="ja">{sentence.ja}</p>
+											<p>{sentence.en}</p>
 										</div>
 									{/each}
 								</section>
@@ -712,9 +721,15 @@
 	.more-info {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 1.25rem;
 		border-top: 1px solid var(--border);
 		padding-top: 1rem;
+	}
+
+	.more-info section {
+		display: flex;
+		flex-direction: column;
+		gap: 0.65rem;
 	}
 
 	.related-items {
@@ -733,7 +748,7 @@
 	}
 
 	.context-sentence {
-		padding: 0.65rem 0;
+		padding: 0.75rem 0;
 		border-bottom: 1px solid var(--border);
 	}
 

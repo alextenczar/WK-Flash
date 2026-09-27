@@ -1,19 +1,17 @@
 <script lang="ts">
-	import favicon from '$lib/assets/favicon.svg';
 	import '$lib/app.css';
 
 	let { children } = $props();
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" href="/wk-flash-icon.svg" />
 	<link rel="manifest" href="/manifest.webmanifest" />
 	<link rel="apple-touch-icon" href="/wk-flash-icon.svg" />
 	<meta name="theme-color" content="#000000" />
 	<meta name="apple-mobile-web-app-capable" content="yes" />
 	<meta name="apple-mobile-web-app-title" content="WK Flash" />
 	<meta name="apple-mobile-web-app-status-bar-style" content="black" />
-	<title>WK Flash</title>
 </svelte:head>
 
 <header>

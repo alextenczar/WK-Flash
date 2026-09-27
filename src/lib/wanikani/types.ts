@@ -31,7 +31,7 @@ export interface WKSubjectData {
 	pronunciation_audios?: { url: string; content_type: string }[];
 	visually_similar_subject_ids?: number[];
 	amalgamation_subject_ids?: number[];
-	context_sentences?: { japanese: string; english: string }[];
+	context_sentences?: { ja: string; en: string }[];
 }
 
 export interface WKSubject {
