@@ -5,6 +5,14 @@ const BASE_URL = 'https://api.wanikani.com/v2';
 const SUBJECT_CACHE_NAME = 'wk-flash-wanikani-subjects-v1';
 const SUBJECT_CACHE_TTL = 24 * 60 * 60 * 1000;
 const MAX_RATE_LIMIT_RETRIES = 2;
+const REVIEW_QUEUE_CACHE_PATH = '/__wk-flash-cache/review-queue';
+export const REVIEW_QUEUE_FRESH_MS = 60 * 1000;
+
+export interface CachedReviewQueue {
+	fetchedAt: number;
+	cards: ReviewCard[];
+	user: WKUser;
+}
 
 export class WaniKaniError extends Error {
 	status: number;
@@ -55,6 +63,72 @@ async function openSubjectCache(): Promise<Cache | null> {
 
 function subjectCacheRequest(subjectId: number): Request {
 	return new Request(new URL(`/__wk-flash-cache/subjects/${subjectId}`, location.origin));
+}
+
+function reviewQueueCacheRequest(): Request {
+	return new Request(new URL(REVIEW_QUEUE_CACHE_PATH, location.origin));
+}
+
+export async function getCachedReviewQueue(): Promise<CachedReviewQueue | null> {
+	const cache = await openSubjectCache();
+	if (!cache) return null;
+	try {
+		const response = await cache.match(reviewQueueCacheRequest());
+		if (!response) return null;
+		const snapshot = (await response.json()) as CachedReviewQueue;
+		if (
+			!Number.isFinite(snapshot.fetchedAt) ||
+			typeof snapshot.user?.username !== 'string' ||
+			!Array.isArray(snapshot.cards) ||
+			!snapshot.cards.every(
+				(card) => typeof card?.assignmentId === 'number' && typeof card.subject?.data === 'object'
+			)
+		) {
+			return null;
+		}
+		return snapshot;
+	} catch {
+		return null;
+	}
+}
+
+async function cacheReviewQueue(cards: ReviewCard[], user: WKUser): Promise<void> {
+	const cache = await openSubjectCache();
+	if (!cache) return;
+	try {
+		await cache.put(
+			reviewQueueCacheRequest(),
+			new Response(JSON.stringify({ fetchedAt: Date.now(), cards, user } satisfies CachedReviewQueue), {
+				headers: { 'Content-Type': 'application/json' }
+			})
+		);
+	} catch {
+		// A full cache should not prevent online reviews.
+	}
+}
+
+export async function removeCachedReviewCard(assignmentId: number): Promise<void> {
+	const cache = await openSubjectCache();
+	if (!cache) return;
+	try {
+		const request = reviewQueueCacheRequest();
+		const response = await cache.match(request);
+		if (!response) return;
+		const snapshot = (await response.json()) as CachedReviewQueue;
+		if (!Array.isArray(snapshot.cards)) return;
+		await cache.put(
+			request,
+			new Response(
+				JSON.stringify({
+					...snapshot,
+					cards: snapshot.cards.filter((card) => card.assignmentId !== assignmentId)
+				}),
+				{ headers: { 'Content-Type': 'application/json' } }
+			)
+		);
+	} catch {
+		// A cache failure should not interrupt review submission.
+	}
 }
 
 async function cacheSubject(cache: Cache | null, subject: WKSubject): Promise<void> {
@@ -132,14 +206,6 @@ export async function getReviewAssignments(
 	maxAccessibleLevel: number
 ): Promise<WKAssignment[]> {
 	return wkFetchAllPages<WKAssignment>(reviewAssignmentsPath(maxAccessibleLevel), apiToken);
-}
-
-async function getReviewAssignmentCount(apiToken: string, maxAccessibleLevel: number): Promise<number> {
-	const collection = await wkFetch<{ total_count: number }>(
-		reviewAssignmentsPath(maxAccessibleLevel),
-		apiToken
-	);
-	return collection.total_count;
 }
 
 export async function getSubjectsByIds(
@@ -234,31 +300,41 @@ async function getAccessibleReviewData(apiToken: string): Promise<{
 	};
 }
 
-export async function getReviewOverview(apiToken: string): Promise<{ user: WKUser; reviewCount: number }> {
-	const user = await getUser(apiToken);
-	const maxAccessibleLevel = Math.min(user.level, user.subscription.max_level_granted);
-	const reviewCount = await getReviewAssignmentCount(apiToken, maxAccessibleLevel);
-	return { user, reviewCount };
-}
-
-/** Builds the combined meaning+reading review queue for every currently available review. */
-export async function buildReviewQueue(apiToken: string): Promise<ReviewCard[]> {
-	const { assignments, subjectById, maxAccessibleLevel } = await getAccessibleReviewData(apiToken);
-
-	const cards: ReviewCard[] = [];
-	for (const assignment of assignments) {
+function reviewCardsFromData(
+	assignments: WKAssignment[],
+	subjectById: Map<number, WKSubject>,
+	maxAccessibleLevel: number
+): ReviewCard[] {
+	return assignments.flatMap((assignment) => {
 		const subject = subjectById.get(assignment.data.subject_id);
-		if (!subject) continue;
-		cards.push({
+		if (!subject) return [];
+		return [{
 			assignmentId: assignment.id,
 			srsStage: assignment.data.srs_stage,
 			maxAccessibleLevel,
 			subject,
-			// Radicals have no reading, and kana vocabulary is tested on meaning only.
 			needsReading: subject.object !== 'radical' && subject.object !== 'kana_vocabulary',
 			incorrectCount: 0
-		});
-	}
+		}];
+	});
+}
+
+export async function getReviewOverview(apiToken: string): Promise<{
+	user: WKUser;
+	reviewCount: number;
+	cards: ReviewCard[];
+}> {
+	const { user, assignments, subjectById, maxAccessibleLevel } = await getAccessibleReviewData(apiToken);
+	const cards = reviewCardsFromData(assignments, subjectById, maxAccessibleLevel);
+	await cacheReviewQueue(cards, user);
+	return { user, reviewCount: assignments.length, cards };
+}
+
+/** Builds the combined meaning+reading review queue for every currently available review. */
+export async function buildReviewQueue(apiToken: string): Promise<ReviewCard[]> {
+	const { user, assignments, subjectById, maxAccessibleLevel } = await getAccessibleReviewData(apiToken);
+	const cards = reviewCardsFromData(assignments, subjectById, maxAccessibleLevel);
+	await cacheReviewQueue(cards, user);
 	return cards;
 }
 

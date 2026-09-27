@@ -6,11 +6,18 @@
 	import { showMnemonics, showPartsOfSpeech, showSrsChanges } from '$lib/review-preferences';
 	import { reviewAudioSettings } from '$lib/review-audio';
 	import { clearReviewSession, readReviewSession, saveReviewSession } from '$lib/review-session';
-	import { buildReviewQueue, getSubjectsByIds, WaniKaniError } from '$lib/wanikani/api';
+	import {
+		buildReviewQueue,
+		getCachedReviewQueue,
+		getSubjectsByIds,
+		REVIEW_QUEUE_FRESH_MS,
+		WaniKaniError
+	} from '$lib/wanikani/api';
 	import { allMeanings, primaryMeaning, readingsForDisplay, vocabularyByReading } from '$lib/wanikani/matching';
 	import {
 		formatSrsStageUpdate,
 		latestSrsStageUpdate,
+		pendingReviews,
 		queueReviewSubmission,
 		recordSrsStageUpdate,
 		submitQueuedReview
@@ -150,10 +157,33 @@
 		return true;
 	}
 
+function withoutQueuedSubmissions(cards: ReviewCard[]): ReviewCard[] {
+	const queuedIds = new Set($pendingReviews.map((review) => review.assignmentId));
+	return cards.filter((card) => !queuedIds.has(card.assignmentId));
+}
+
+async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
+	const cachedQueue = await getCachedReviewQueue();
+	const cachedCards = cachedQueue ? withoutQueuedSubmissions(cachedQueue.cards) : null;
+	if (!navigator.onLine) {
+		if (cachedCards) return cachedCards;
+		throw new WaniKaniError('No offline review queue is saved on this device. Connect once to preload reviews.', 0);
+	}
+	if (cachedQueue && Date.now() - cachedQueue.fetchedAt < REVIEW_QUEUE_FRESH_MS) {
+		return cachedCards ?? [];
+	}
+	try {
+		return withoutQueuedSubmissions(await buildReviewQueue($apiKey));
+	} catch (e) {
+		if (cachedCards) return cachedCards;
+		throw e;
+	}
+}
+
 	async function addNewDueReviews() {
 		if (wrapUp || phase !== 'question') return;
 		try {
-			const availableCards = await buildReviewQueue($apiKey);
+			const availableCards = await getAvailableReviewQueue();
 			if (wrapUp || phase !== 'question') return;
 			const newCards = availableCards.filter((card) => !knownAssignmentIds.has(card.assignmentId));
 			if (newCards.length === 0) return;
@@ -187,7 +217,7 @@
 		phase = 'loading';
 		error = '';
 		try {
-			const cards = await buildReviewQueue($apiKey);
+			const cards = await getAvailableReviewQueue();
 			if (cards.length === 0) {
 				phase = 'finished';
 				totalUnique = 0;

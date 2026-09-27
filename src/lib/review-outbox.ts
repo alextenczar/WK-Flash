@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 import { get, writable } from 'svelte/store';
-import { submitReview } from '$lib/wanikani/api';
+import { removeCachedReviewCard, submitReview } from '$lib/wanikani/api';
 
 const STORAGE_KEY = 'wk-flash:pending-reviews';
 
@@ -92,6 +92,7 @@ export function queueReviewSubmission(review: PendingReviewSubmission): void {
 	pendingReviews.update((reviews) =>
 		reviews.some((item) => item.assignmentId === review.assignmentId) ? reviews : [...reviews, review]
 	);
+	void removeCachedReviewCard(review.assignmentId);
 }
 
 function removeQueuedReviewSubmission(assignmentId: number): void {
