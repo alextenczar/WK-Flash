@@ -1,0 +1,22 @@
+# WK Flash
+
+> An unofficial third-party, Anki-inspired flashcard review app for WaniKani learners.
+
+WK Flash combines meaning and reading prompts on one review card. It sends review results to the WaniKani API using a personal access token entered by the user. The token is stored in browser local storage and requests are made directly to WaniKani.
+
+## Features
+
+- Review meaning and reading together on one card.
+- Configure keyboard shortcuts for review actions.
+- Resume an in-progress review from locally saved session state.
+- View vocabulary readings, example sentences, and pronunciation audio when available.
+
+## Pages
+
+- `/`: Review dashboard.
+- `/settings`: Enter or remove the personal access token and configure review preferences.
+- `/keybindings`: Configure review keyboard shortcuts.
+
+## Important
+
+WK Flash is an unofficial third-party application and is not affiliated with WaniKani or Anki. “Anki-inspired” describes the flashcard workflow only.

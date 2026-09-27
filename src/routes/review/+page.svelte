@@ -366,6 +366,7 @@
 			class:radical-card={current.subject.object === 'radical'}
 			class:kanji-card={current.subject.object === 'kanji'}
 			class:vocabulary-card={current.subject.object === 'vocabulary' || current.subject.object === 'kana_vocabulary'}
+			class:expanded-card={flipped && moreInfoOpen}
 		>
 			<div class="characters" class:small={!current.subject.data.characters}>
 				{#if current.subject.data.characters}
@@ -839,6 +840,10 @@
 			min-height: 340px;
 		}
 
+		.card.expanded-card {
+			height: auto;
+		}
+
 		.back {
 			flex: 1;
 			width: 100%;
@@ -848,6 +853,12 @@
 			overflow-y: auto;
 			scrollbar-gutter: stable;
 			overscroll-behavior: contain;
+		}
+
+		.card.expanded-card .back {
+			flex: initial;
+			min-height: auto;
+			overflow: visible;
 		}
 	}
 
