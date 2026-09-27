@@ -45,12 +45,12 @@ export function recordSrsStageUpdate(update: SrsStageUpdate): void {
 
 export function formatSrsStageUpdate(update: SrsStageUpdate): string {
 	if (update.endingStage < update.startingStage) {
-		return `${update.subjectLabel}: SRS level decreased from ${srsStageLabel(update.startingStage)} to ${srsStageLabel(update.endingStage)}.`;
+		return `${update.subjectLabel}: SRS stage decreased from ${srsStageLabel(update.startingStage)} to ${srsStageLabel(update.endingStage)}.`;
 	}
 	if (update.endingStage > update.startingStage) {
-		return `${update.subjectLabel}: SRS level increased from ${srsStageLabel(update.startingStage)} to ${srsStageLabel(update.endingStage)}.`;
+		return `${update.subjectLabel}: SRS stage increased from ${srsStageLabel(update.startingStage)} to ${srsStageLabel(update.endingStage)}.`;
 	}
-	return `${update.subjectLabel}: SRS level stayed at ${srsStageLabel(update.endingStage)}.`;
+	return `${update.subjectLabel}: SRS stage stayed at ${srsStageLabel(update.endingStage)}.`;
 }
 
 function isPendingReview(value: unknown): value is PendingReviewSubmission {
