@@ -2,7 +2,12 @@ import { base, build, files, version } from '$service-worker';
 
 const CACHE_NAME = `wk-flash-${version}`;
 const APP_SHELL = `${base.replace(/\/$/, '')}/`;
-const PRECACHE_URLS = [...new Set([...build, ...files, APP_SHELL])];
+const APP_ASSETS = [...new Set([...build, ...files])];
+const isFontAsset = (path: string) => /\.(?:woff2?|ttf|otf)$/i.test(new URL(path, self.location.origin).pathname);
+const FONT_PATHS = new Set(
+	APP_ASSETS.filter(isFontAsset).map((path) => new URL(path, self.location.origin).pathname)
+);
+const PRECACHE_URLS = [...new Set([...APP_ASSETS.filter((path) => !isFontAsset(path)), APP_SHELL])];
 const PRECACHED_PATHS = new Set(
 	PRECACHE_URLS.map((path) => new URL(path, self.location.origin).pathname)
 );
@@ -53,6 +58,27 @@ self.addEventListener('fetch', (event) => {
 				} catch {
 					return (await cache.match(request)) ?? (await cache.match(APP_SHELL)) ?? Response.error();
 				}
+			})()
+		);
+		return;
+	}
+
+	if (FONT_PATHS.has(url.pathname)) {
+		event.respondWith(
+			(async () => {
+				const cache = await caches.open(CACHE_NAME);
+				const cached = await cache.match(request);
+				if (cached) return cached;
+
+				const response = await fetch(request);
+				if (response.ok) {
+					try {
+						await cache.put(request, response.clone());
+					} catch {
+						// Keep the font response if storage is unavailable or full.
+					}
+				}
+				return response;
 			})()
 		);
 		return;
