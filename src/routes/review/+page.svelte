@@ -88,7 +88,11 @@
 
 		moreInfoLoading = true;
 		try {
-			const fetchedSubjects = await getSubjectsByIds($apiKey, uniqueIds);
+			const fetchedSubjects = await getSubjectsByIds(
+				$apiKey,
+				uniqueIds,
+				current.maxAccessibleLevel ?? current.subject.data.level
+			);
 			if (current?.subject.id !== subject.id) return;
 			detailSubject = fetchedSubjects.find((item) => item.id === subject.id) ?? subject;
 			relatedSubjects = fetchedSubjects.filter((item) => item.id !== subject.id);

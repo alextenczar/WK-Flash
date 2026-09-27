@@ -2,6 +2,9 @@ export interface WKUser {
 	id: string;
 	username: string;
 	level: number;
+	subscription: {
+		max_level_granted: number;
+	};
 }
 
 export interface WKMeaning {
@@ -21,6 +24,7 @@ export type SubjectType = 'radical' | 'kanji' | 'vocabulary' | 'kana_vocabulary'
 
 export interface WKSubjectData {
 	characters: string | null;
+	level: number;
 	meanings: WKMeaning[];
 	readings?: WKReading[];
 	meaning_mnemonic: string;
@@ -46,6 +50,7 @@ export interface WKAssignment {
 	data: {
 		subject_id: number;
 		subject_type: SubjectType;
+		level: number;
 		srs_stage: number;
 		available_at: string | null;
 	};
@@ -55,6 +60,7 @@ export interface WKAssignment {
 export interface ReviewCard {
 	assignmentId: number;
 	srsStage?: number;
+	maxAccessibleLevel?: number;
 	subject: WKSubject;
 	needsReading: boolean;
 	incorrectCount: number;

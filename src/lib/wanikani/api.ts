@@ -1,6 +1,10 @@
+import { browser } from '$app/environment';
 import type { ReviewCard, WKAssignment, WKSubject, WKUser } from './types';
 
 const BASE_URL = 'https://api.wanikani.com/v2';
+const SUBJECT_CACHE_NAME = 'wk-flash-wanikani-subjects-v1';
+const SUBJECT_CACHE_TTL = 24 * 60 * 60 * 1000;
+const MAX_RATE_LIMIT_RETRIES = 2;
 
 export class WaniKaniError extends Error {
 	status: number;
@@ -16,8 +20,62 @@ export interface ReviewStageResult {
 	endingSrsStage: number | null;
 }
 
+function retryDelay(response: Response, retryCount: number): number {
+	const retryAfter = response.headers.get('Retry-After');
+	if (retryAfter) {
+		const seconds = Number(retryAfter);
+		if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+		const retryAt = Date.parse(retryAfter);
+		if (Number.isFinite(retryAt)) return Math.max(0, retryAt - Date.now());
+	}
+
+	const resetAt = Number(response.headers.get('RateLimit-Reset'));
+	if (Number.isFinite(resetAt) && resetAt > 0) {
+		return Math.max(0, resetAt * 1000 - Date.now());
+	}
+	return 1000 * 2 ** retryCount;
+}
+
+async function wkFetchResponse(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+	for (let retryCount = 0; ; retryCount++) {
+		const response = await fetch(input, init);
+		if (response.status !== 429 || retryCount >= MAX_RATE_LIMIT_RETRIES) return response;
+		await new Promise((resolve) => setTimeout(resolve, retryDelay(response, retryCount)));
+	}
+}
+
+async function openSubjectCache(): Promise<Cache | null> {
+	if (!browser || !('caches' in globalThis)) return null;
+	try {
+		return await caches.open(SUBJECT_CACHE_NAME);
+	} catch {
+		return null;
+	}
+}
+
+function subjectCacheRequest(subjectId: number): Request {
+	return new Request(new URL(`/__wk-flash-cache/subjects/${subjectId}`, location.origin));
+}
+
+async function cacheSubject(cache: Cache | null, subject: WKSubject): Promise<void> {
+	if (!cache) return;
+	try {
+		await cache.put(
+			subjectCacheRequest(subject.id),
+			new Response(JSON.stringify(subject), {
+				headers: {
+					'Content-Type': 'application/json',
+					'X-WK-Flash-Cached-At': String(Date.now())
+				}
+			})
+		);
+	} catch {
+		// Reviews continue to work when browser caching is unavailable or full.
+	}
+}
+
 async function wkFetch<T>(path: string, apiToken: string): Promise<T> {
-	const res = await fetch(`${BASE_URL}${path}`, {
+	const res = await wkFetchResponse(`${BASE_URL}${path}`, {
 		headers: {
 			Authorization: `Bearer ${apiToken}`,
 			'Wanikani-Revision': '20170710'
@@ -25,6 +83,7 @@ async function wkFetch<T>(path: string, apiToken: string): Promise<T> {
 	});
 	if (!res.ok) {
 		if (res.status === 401) throw new WaniKaniError('Invalid API key.', 401);
+		if (res.status === 429) throw new WaniKaniError('WaniKani rate limit reached. Please try again shortly.', 429);
 		throw new WaniKaniError(`WaniKani API error (${res.status}).`, res.status);
 	}
 	return res.json() as Promise<T>;
@@ -36,7 +95,7 @@ async function wkFetchAllPages<T>(path: string, apiToken: string): Promise<T[]> 
 	let nextUrl: string | null = `${BASE_URL}${path}`;
 
 	while (nextUrl) {
-		const res: Response = await fetch(nextUrl, {
+		const res: Response = await wkFetchResponse(nextUrl, {
 			headers: {
 				Authorization: `Bearer ${apiToken}`,
 				'Wanikani-Revision': '20170710'
@@ -44,6 +103,7 @@ async function wkFetchAllPages<T>(path: string, apiToken: string): Promise<T[]> 
 		});
 		if (!res.ok) {
 			if (res.status === 401) throw new WaniKaniError('Invalid API key.', 401);
+			if (res.status === 429) throw new WaniKaniError('WaniKani rate limit reached. Please try again shortly.', 429);
 			throw new WaniKaniError(`WaniKani API error (${res.status}).`, res.status);
 		}
 		const json: { data: T[]; pages: { next_url: string | null } } = await res.json();
@@ -68,37 +128,84 @@ export async function getReviewAssignments(apiToken: string): Promise<WKAssignme
 
 export async function getSubjectsByIds(
 	apiToken: string,
-	ids: number[]
+	ids: number[],
+	maxAccessibleLevel?: number
 ): Promise<WKSubject[]> {
 	if (ids.length === 0) return [];
-	const subjects: WKSubject[] = [];
+	const uniqueIds = [...new Set(ids)];
+	const cache = await openSubjectCache();
+	const subjectById = new Map<number, WKSubject>();
+	const idsToFetch: number[] = [];
+	if (cache) {
+		await Promise.all(
+			uniqueIds.map(async (id) => {
+				try {
+					const response = await cache.match(subjectCacheRequest(id));
+					if (!response) {
+						idsToFetch.push(id);
+						return;
+					}
+					const cachedAt = Number(response.headers.get('X-WK-Flash-Cached-At'));
+					if (!cachedAt || Date.now() - cachedAt >= SUBJECT_CACHE_TTL) {
+						idsToFetch.push(id);
+						return;
+					}
+					const subject = (await response.json()) as WKSubject;
+					if (maxAccessibleLevel === undefined || subject.data.level <= maxAccessibleLevel) {
+						subjectById.set(id, subject);
+					}
+				} catch {
+					idsToFetch.push(id);
+				}
+			})
+		);
+	} else {
+		idsToFetch.push(...uniqueIds);
+	}
+
 	// WaniKani limits URL length, so chunk large ID lists.
 	const chunkSize = 500;
-	for (let i = 0; i < ids.length; i += chunkSize) {
-		const chunk = ids.slice(i, i + chunkSize);
+	for (let i = 0; i < idsToFetch.length; i += chunkSize) {
+		const chunk = idsToFetch.slice(i, i + chunkSize);
+		const levelFilter = maxAccessibleLevel === undefined
+			? ''
+			: `&levels=${Array.from({ length: maxAccessibleLevel }, (_, index) => index + 1).join(',')}`;
 		const chunkSubjects = await wkFetchAllPages<WKSubject>(
-			`/subjects?ids=${chunk.join(',')}`,
+			`/subjects?ids=${chunk.join(',')}${levelFilter}`,
 			apiToken
 		);
-		subjects.push(...chunkSubjects);
+		for (const subject of chunkSubjects) {
+			if (maxAccessibleLevel !== undefined && subject.data.level > maxAccessibleLevel) continue;
+			subjectById.set(subject.id, subject);
+			await cacheSubject(cache, subject);
+		}
 	}
-	return subjects;
+	return uniqueIds.flatMap((id) => {
+		const subject = subjectById.get(id);
+		return subject ? [subject] : [];
+	});
 }
 
 /** Builds the combined meaning+reading review queue for every currently available review. */
 export async function buildReviewQueue(apiToken: string): Promise<ReviewCard[]> {
-	const assignments = await getReviewAssignments(apiToken);
-	const subjectIds = assignments.map((a) => a.data.subject_id);
+	const [user, assignments] = await Promise.all([
+		getUser(apiToken),
+		getReviewAssignments(apiToken)
+	]);
+	const maxAccessibleLevel = Math.min(user.level, user.subscription.max_level_granted);
+	const accessibleAssignments = assignments.filter((assignment) => assignment.data.level <= maxAccessibleLevel);
+	const subjectIds = accessibleAssignments.map((assignment) => assignment.data.subject_id);
 	const subjects = await getSubjectsByIds(apiToken, subjectIds);
 	const subjectById = new Map(subjects.map((s) => [s.id, s]));
 
 	const cards: ReviewCard[] = [];
-	for (const assignment of assignments) {
+	for (const assignment of accessibleAssignments) {
 		const subject = subjectById.get(assignment.data.subject_id);
 		if (!subject) continue;
 		cards.push({
 			assignmentId: assignment.id,
 			srsStage: assignment.data.srs_stage,
+			maxAccessibleLevel,
 			subject,
 			// Radicals have no reading, and kana vocabulary is tested on meaning only.
 			needsReading: subject.object !== 'radical' && subject.object !== 'kana_vocabulary',
@@ -115,7 +222,7 @@ export async function submitReview(
 	incorrectCount: number,
 	needsReading: boolean
 ): Promise<ReviewStageResult> {
-	const res = await fetch(`${BASE_URL}/reviews`, {
+	const res = await wkFetchResponse(`${BASE_URL}/reviews`, {
 		method: 'POST',
 		headers: {
 			Authorization: `Bearer ${apiToken}`,
@@ -133,6 +240,7 @@ export async function submitReview(
 	});
 	if (!res.ok) {
 		if (res.status === 401) throw new WaniKaniError('Invalid API key.', 401);
+		if (res.status === 429) throw new WaniKaniError('WaniKani rate limit reached. Please try again shortly.', 429);
 		const body = await res.text();
 		throw new WaniKaniError(`Failed to submit review (${res.status}): ${body}`, res.status);
 	}

@@ -25,7 +25,8 @@
 				getReviewAssignments($apiKey)
 			]);
 			user = u;
-			reviewCount = assignments.length;
+		const maxAccessibleLevel = Math.min(u.level, u.subscription.max_level_granted);
+			reviewCount = assignments.filter((assignment) => assignment.data.level <= maxAccessibleLevel).length;
 			try {
 				localStorage.setItem(REVIEW_COUNT_KEY, String(reviewCount));
 			} catch {
