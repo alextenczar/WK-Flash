@@ -292,6 +292,7 @@
 				<p class="empty-state" role="status">Loading kanji progress...</p>
 			{:else if progress}
 				{#if visibleKanji.length}
+					<div class="list-scroll" role="region" aria-label="Scrollable kanji progress results">
 					<ul class="kanji-list">
 						<li class="column-headings kanji-columns" aria-hidden="true">
 							<span>Item</span><span>Meaning</span><span>WK level</span><span>Status</span><span>SRS</span>
@@ -300,12 +301,13 @@
 							<li>
 								<span class="character" lang="ja">{row.character}</span>
 								<span class="meaning">{row.meaning || ' '}</span>
-								<span class="wk-level">{row.subjectLevel === null ? '—' : `L${row.subjectLevel}`}</span>
+								<span class="wk-level">{row.subjectLevel === null ? '—' : row.subjectLevel}</span>
 								<span class={`status status--${row.statusClass}`}>{row.status}</span>
 								<span class="stage">{row.srsStage === null ? '' : `SRS ${row.srsStage}`}</span>
 							</li>
 						{/each}
 					</ul>
+					</div>
 				{:else}
 					<p class="empty-state">No kanji match “{search}”.</p>
 				{/if}
@@ -376,6 +378,7 @@
 				<p class="empty-state" role="status">Loading vocabulary progress...</p>
 			{:else if vocabularyProgress}
 				{#if visibleVocabulary.length}
+					<div class="list-scroll" role="region" aria-label="Scrollable vocabulary progress results">
 					<ul class="kanji-list">
 						<li class="column-headings vocabulary-columns" aria-hidden="true">
 							<span>Item</span><span>Meaning</span><span>WK level</span><span>Status</span><span>SRS</span>
@@ -384,12 +387,13 @@
 							<li>
 								<span class="vocabulary-expression" lang="ja">{row.entry.expression}<small>{row.entry.reading}</small></span>
 								<span class="meaning">{row.entry.meaning}</span>
-								<span class="wk-level">{row.subjectLevel === null ? '—' : `L${row.subjectLevel}`}</span>
+								<span class="wk-level">{row.subjectLevel === null ? '—' : row.subjectLevel}</span>
 								<span class={`status status--${row.statusClass}`}>{row.status}</span>
 								<span class="stage">{row.srsStage === null ? '' : `SRS ${row.srsStage}`}</span>
 							</li>
 						{/each}
 					</ul>
+					</div>
 				{:else}
 					<p class="empty-state">No vocabulary matches “{vocabularySearch}”.</p>
 				{/if}
@@ -547,6 +551,12 @@
 		list-style: none;
 	}
 
+	.list-scroll {
+		max-width: 100%;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+
 	.expand-button {
 		margin-top: 1rem;
 	}
@@ -672,26 +682,14 @@
 			height: 8px;
 		}
 
-		.kanji-list li {
-			grid-template-columns: 2.75rem minmax(0, 1fr) 3.5rem auto;
-			gap: 0.5rem;
-		}
-
-		.kanji-list li.vocabulary-columns {
-			grid-template-columns: minmax(4.5rem, 6rem) minmax(0, 1fr) 3.5rem auto;
+		.kanji-list {
+			min-width: 620px;
 		}
 
 		.vocabulary-expression {
 			font-size: 1rem;
 		}
 
-		.column-headings span:last-child {
-			display: none;
-		}
-
-		.stage {
-			display: none;
-		}
 	}
 
 	@media (max-width: 380px) {

@@ -1,10 +1,8 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import { onMount } from 'svelte';
 	import '$lib/app.css';
 	import { apiKey } from '$lib/storage';
-	import { formatSrsStageUpdate, latestSrsStageUpdate, pendingReviews, syncPendingReviews } from '$lib/review-outbox';
-	import { showSrsChanges } from '$lib/review-preferences';
+	import { pendingReviews, syncPendingReviews } from '$lib/review-outbox';
 
 	let { children } = $props();
 	let isOnline = $state(true);
@@ -53,18 +51,6 @@
 		</div>
 	</nav>
 </header>
-
-{#if $showSrsChanges && $latestSrsStageUpdate && page.url.pathname !== '/review'}
-	<div
-		class="srs-stage-notification srs-stage-notification--global"
-		class:decreased={$latestSrsStageUpdate.endingStage < $latestSrsStageUpdate.startingStage}
-		class:unchanged={$latestSrsStageUpdate.endingStage === $latestSrsStageUpdate.startingStage}
-		role="status"
-		aria-live="polite"
-	>
-		{formatSrsStageUpdate($latestSrsStageUpdate)}
-	</div>
-{/if}
 
 {#if !isOnline || $pendingReviews.length > 0}
 	<!-- <div class="connection-status" role="status">

@@ -22,6 +22,8 @@
 	} from '$lib/wanikani/api';
 	import { allMeanings, primaryMeaning, readingsForDisplay, vocabularyByReading } from '$lib/wanikani/matching';
 	import {
+		formatSrsStageUpdate,
+		latestSrsStageUpdate,
 		pendingReviews,
 		queueReviewSubmission,
 		recordSrsStageUpdate,
@@ -619,6 +621,17 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				</div>
 			{/if}
 		</div>
+		{#if $showSrsChanges && $latestSrsStageUpdate}
+			<div
+				class="srs-stage-notification"
+				class:decreased={$latestSrsStageUpdate.endingStage < $latestSrsStageUpdate.startingStage}
+				class:unchanged={$latestSrsStageUpdate.endingStage === $latestSrsStageUpdate.startingStage}
+				role="status"
+				aria-live="polite"
+			>
+				{formatSrsStageUpdate($latestSrsStageUpdate)}
+			</div>
+		{/if}
 	{/if}
 </div>
 

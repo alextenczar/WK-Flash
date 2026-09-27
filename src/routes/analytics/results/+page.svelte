@@ -222,6 +222,7 @@
 	{:else if loading}
 		<p class="empty-state" role="status">Loading JLPT progress...</p>
 	{:else if visibleRows.length}
+		<div class="list-scroll" role="region" aria-label="Scrollable JLPT progress results">
 		<ul class="results-list" class:vocabulary-list={resultType === 'vocabulary'}>
 			<li class="column-headings" aria-hidden="true">
 				<span>Item</span><span>JLPT</span><span>WK level</span><span>Meaning</span><span>Status</span><span>SRS</span>
@@ -233,13 +234,14 @@
 						{#if row.reading}<small>{row.reading}</small>{/if}
 					</span>
 					<span class="jlpt-level">{row.levels.join(', ')}</span>
-					<span class="wk-level">{row.wanikaniLevel === null ? '—' : `L${row.wanikaniLevel}`}</span>
+					<span class="wk-level">{row.wanikaniLevel === null ? '—' : row.wanikaniLevel}</span>
 					<span class="meaning">{row.meaning || ' '}</span>
 					<span class={`status status--${row.statusClass}`}>{row.status}</span>
 					<span class="stage">{row.detail}</span>
 				</li>
 			{/each}
 		</ul>
+		</div>
 	{:else}
 		<p class="empty-state">No results match “{search}”.</p>
 	{/if}
@@ -285,6 +287,12 @@
 		margin: 0.75rem 0;
 		color: var(--muted);
 		font-size: 0.875rem;
+	}
+
+	.list-scroll {
+		max-width: 100%;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
 	}
 
 	.results-list {
@@ -393,21 +401,8 @@
 	}
 
 	@media (max-width: 560px) {
-		.results-list li {
-			grid-template-columns: 2.75rem 3rem 3rem minmax(0, 1fr) auto;
-			gap: 0.5rem;
-		}
-
-		.results-list.vocabulary-list li {
-			grid-template-columns: minmax(4.5rem, 6rem) 3rem 3rem minmax(0, 1fr) auto;
-		}
-
-		.column-headings span:last-child {
-			display: none;
-		}
-
-		.stage {
-			display: none;
+		.results-list {
+			min-width: 680px;
 		}
 
 		.vocabulary-expression {
