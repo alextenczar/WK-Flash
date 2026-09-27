@@ -3,11 +3,17 @@
 	import { onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
 	import { keybindings } from '$lib/keybindings';
-	import { showMnemonics } from '$lib/review-preferences';
+	import { showMnemonics, showPartsOfSpeech, showSrsChanges } from '$lib/review-preferences';
 	import { reviewAudioSettings } from '$lib/review-audio';
 	import { clearReviewSession, readReviewSession, saveReviewSession } from '$lib/review-session';
 	import { buildReviewQueue, getSubjectsByIds, submitReview, WaniKaniError } from '$lib/wanikani/api';
 	import { allMeanings, primaryMeaning, readingsForDisplay, vocabularyByReading } from '$lib/wanikani/matching';
+	import {
+		formatSrsStageUpdate,
+		latestSrsStageUpdate,
+		queueReviewSubmission,
+		recordSrsStageUpdate
+	} from '$lib/review-outbox';
 	import type { ReviewCard, WKSubject } from '$lib/wanikani/types';
 
 	type Phase = 'loading' | 'question' | 'finished' | 'error';
@@ -37,6 +43,10 @@
 	const current = $derived(queue[0] ?? null);
 	const similarKanji = $derived(relatedSubjects.filter((subject) => subject.object === 'kanji'));
 	const vocabularyGroups = $derived(vocabularyByReading(relatedSubjects));
+
+	function mnemonicText(markup: string): string {
+		return markup.replace(/<\/?(?:radical|kanji|vocabulary|meaning|reading|ja)>/gi, '');
+	}
 
 	function resetMoreInfo() {
 		moreInfoOpen = false;
@@ -129,8 +139,9 @@
 		completedCount = saved.completedCount;
 		correctFirstTry = saved.correctFirstTry;
 		wrapUp = saved.wrapUp;
-		flipped = saved.flipped;
+		flipped = false;
 		phase = 'question';
+		saveCurrentSession();
 		return true;
 	}
 
@@ -253,6 +264,7 @@
 
 	async function grade(wasCorrect: boolean) {
 		if (!current) return;
+		error = '';
 		const card = current;
 		resetMoreInfo();
 		flipped = false;
@@ -277,10 +289,38 @@
 			pendingIds = remaining;
 			completedCount = totalUnique - pendingIds.size;
 			saveCurrentSession();
-			try {
-				await submitReview($apiKey, card.assignmentId, card.incorrectCount, card.needsReading);
-			} catch (e) {
-				error = e instanceof WaniKaniError ? e.message : 'Failed to submit a review to WaniKani.';
+			const reviewSubmission = {
+				assignmentId: card.assignmentId,
+				incorrectCount: card.incorrectCount,
+				needsReading: card.needsReading,
+				startingSrsStage: card.srsStage,
+				subjectLabel: card.subject.data.characters ?? card.subject.data.slug
+			};
+			if (!navigator.onLine) {
+				queueReviewSubmission(reviewSubmission);
+			} else {
+				try {
+					const { startingSrsStage, endingSrsStage } = await submitReview(
+						$apiKey,
+						card.assignmentId,
+						card.incorrectCount,
+						card.needsReading
+					);
+					const startingStage = startingSrsStage ?? card.srsStage;
+					if ($showSrsChanges && startingStage !== undefined && endingSrsStage !== null) {
+						recordSrsStageUpdate({
+							subjectLabel: reviewSubmission.subjectLabel,
+							startingStage,
+							endingStage: endingSrsStage
+						});
+					}
+				} catch (e) {
+					if (!(e instanceof WaniKaniError)) {
+						queueReviewSubmission(reviewSubmission);
+					} else {
+						error = e instanceof WaniKaniError ? e.message : 'Failed to submit a review to WaniKani.';
+					}
+				}
 			}
 		} else {
 			// Send the card back into the deck a few cards later, Anki-style.
@@ -360,13 +400,15 @@
 				{/if}
 			</div>
 		</div>
+		{#if error}
+			<p class="error" role="alert">{error}</p>
+		{/if}
 
 		<div
 			class="card"
 			class:radical-card={current.subject.object === 'radical'}
 			class:kanji-card={current.subject.object === 'kanji'}
 			class:vocabulary-card={current.subject.object === 'vocabulary' || current.subject.object === 'kana_vocabulary'}
-			class:expanded-card={flipped && moreInfoOpen}
 		>
 			<div class="characters" class:small={!current.subject.data.characters}>
 				{#if current.subject.data.characters}
@@ -408,11 +450,13 @@
 						</section>
 					{/if}
 					{#if current.subject.data.readings?.length}
-						<section>
+						<section class="answer-section">
 							<h3>Reading</h3>
 							{#each readingsForDisplay(current.subject) as group (group.type)}
 								<p>
-									<span class="reading-type">{group.type}:</span>
+									{#if group.type !== 'Reading'}
+										<span class="reading-type">{group.type}:</span>
+									{/if}
 									{#each group.readings as option, index}
 										{#if option.accepted}
 											<strong class="answer-accent" title={option.primary ? 'Primary reading' : 'Accepted alternative'}>{option.reading}</strong>
@@ -424,13 +468,18 @@
 							{/each}
 						</section>
 					{/if}
-					<section>
+					<section class="answer-section">
 						<h3>Meaning</h3>
 						<p>
 							{#each allMeanings(current.subject) as meaning, index}
 								<strong class="answer-accent">{meaning}</strong>{index < current.subject.data.meanings.length - 1 ? ', ' : ''}
 							{/each}
 						</p>
+						{#if $showPartsOfSpeech && current.subject.data.parts_of_speech?.length}
+							<p class="subject-classification">
+								{current.subject.data.parts_of_speech.join(' · ')}
+							</p>
+						{/if}
 					</section>
 
 					<button
@@ -515,18 +564,29 @@
 					{#if $showMnemonics}
 						<section class="mnemonic">
 							<h3>Meaning mnemonic</h3>
-							<p>{@html current.subject.data.meaning_mnemonic}</p>
+							<p>{mnemonicText(current.subject.data.meaning_mnemonic)}</p>
 						</section>
 
 						{#if current.needsReading && current.subject.data.reading_mnemonic}
 							<section class="mnemonic">
 								<h3>Reading mnemonic</h3>
-								<p>{@html current.subject.data.reading_mnemonic}</p>
+								<p>{mnemonicText(current.subject.data.reading_mnemonic)}</p>
 							</section>
 						{/if}
 					{/if}
 				</div>
 			{/if}
+				{#if $showSrsChanges && $latestSrsStageUpdate}
+				<div
+					class="srs-stage-notification"
+					class:decreased={$latestSrsStageUpdate.endingStage < $latestSrsStageUpdate.startingStage}
+					class:unchanged={$latestSrsStageUpdate.endingStage === $latestSrsStageUpdate.startingStage}
+					role="status"
+					aria-live="polite"
+				>
+						{formatSrsStageUpdate($latestSrsStageUpdate)}
+					</div>
+				{/if}
 		</div>
 	{/if}
 </div>
@@ -583,8 +643,16 @@
 		color: var(--bad);
 	}
 
+	.review-container {
+		width: 100%;
+		min-width: 0;
+	}
+
 	.card {
-		margin-top: 1.5rem;
+		position: relative;
+		width: 100%;
+		max-width: 600px;
+		margin: 1.5rem auto 0;
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 16px;
@@ -715,7 +783,7 @@
 	}
 
 	.more-info-toggle {
-		align-self: flex-start;
+		align-self: center;
 		font-size: 0.9rem;
 	}
 
@@ -770,7 +838,19 @@
 	.audio-section {
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: 0.75rem;
+	}
+
+	.answer-section {
+		text-align: center;
+	}
+
+	.subject-classification {
+		margin: 0.75rem 0 0;
+		color: var(--muted);
+		font-size: 0.85rem;
+		text-transform: capitalize;
 	}
 
 	.audio-error {
@@ -835,29 +915,15 @@
 		.card {
 			display: flex;
 			flex-direction: column;
-			justify-content: center;
-			height: min(540px, calc(100dvh - 260px));
 			min-height: 340px;
 		}
 
-		.card.expanded-card {
-			height: auto;
-		}
-
 		.back {
-			flex: 1;
+			flex: initial;
 			width: 100%;
 			max-width: 480px;
-			min-height: 0;
-			margin: 1rem auto 0;
-			overflow-y: auto;
-			scrollbar-gutter: stable;
-			overscroll-behavior: contain;
-		}
-
-		.card.expanded-card .back {
-			flex: initial;
 			min-height: auto;
+			margin: 1rem auto 0;
 			overflow: visible;
 		}
 	}

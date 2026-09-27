@@ -32,6 +32,7 @@ export interface WKSubjectData {
 	visually_similar_subject_ids?: number[];
 	amalgamation_subject_ids?: number[];
 	context_sentences?: { ja: string; en: string }[];
+	parts_of_speech?: string[];
 }
 
 export interface WKSubject {
@@ -53,6 +54,7 @@ export interface WKAssignment {
 /** A single combined meaning+reading flashcard built from an assignment + its subject. */
 export interface ReviewCard {
 	assignmentId: number;
+	srsStage?: number;
 	subject: WKSubject;
 	needsReading: boolean;
 	incorrectCount: number;

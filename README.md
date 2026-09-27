@@ -17,6 +17,14 @@ npm run dev -- --open
 Open Settings and paste a [WaniKani personal access token](https://www.wanikani.com/settings/personal_access_tokens),
 then start a review from the home page.
 
+## Offline use
+
+After the app has loaded once while online, its app shell and built assets are available offline.
+An in-progress review is saved in the browser, and completed answers are queued locally until the
+WaniKani API can be reached again. New reviews cannot be fetched offline, and pronunciation audio
+requires a network connection. Queued answers sync automatically when the app is open and
+connectivity returns.
+
 ## Building
 
 ```sh

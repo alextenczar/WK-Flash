@@ -1,6 +1,7 @@
 {
 	"name": "WK Flash",
 	"short_name": "WK Flash",
+	"description": "An unofficial Anki-inspired flashcard review app with offline session recovery.",
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",

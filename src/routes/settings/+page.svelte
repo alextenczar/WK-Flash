@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { keybindings, type Keybindings } from '$lib/keybindings';
 	import { apiKey } from '$lib/storage';
-	import { showMnemonics } from '$lib/review-preferences';
+	import { showMnemonics, showPartsOfSpeech, showSrsChanges } from '$lib/review-preferences';
 	import { clearReviewSession } from '$lib/review-session';
 	import { reviewAudioSettings } from '$lib/review-audio';
 	import { getUser, WaniKaniError } from '$lib/wanikani/api';
@@ -10,6 +11,27 @@
 	let checking = $state(false);
 	let error = $state('');
 	let success = $state('');
+	let listeningFor = $state<keyof Keybindings | null>(null);
+
+	const keybindingActions: { key: keyof Keybindings; label: string; hint: string }[] = [
+		{ key: 'flip', label: 'Flip card', hint: 'Reveals the meaning and reading.' },
+		{ key: 'correct', label: 'Mark correct', hint: 'Only active once the card is flipped.' },
+		{ key: 'wrong', label: 'Mark wrong', hint: 'Only active once the card is flipped; requeues the card.' }
+	];
+
+	function startListening(action: keyof Keybindings) {
+		listeningFor = action;
+	}
+
+	function handleKeydown(event: KeyboardEvent, action: keyof Keybindings) {
+		event.preventDefault();
+		if (event.key === 'Escape') {
+			listeningFor = null;
+			return;
+		}
+		keybindings.setBinding(action, event.key.length === 1 ? event.key.toLowerCase() : event.key);
+		listeningFor = null;
+	}
 
 	async function save() {
 		error = '';
@@ -47,7 +69,7 @@
 	<h1>Settings</h1>
 	<p>
 		Enter a WaniKani personal access token. You can generate one from your
-		<a href="https://www.wanikani.com/settings/personal_access_tokens" target="_blank" rel="noreferrer"
+		<a href="https://www.wanikani.com/settings/personal_access_tokens" target="_blank" rel="noopener noreferrer"
 			>WaniKani account settings</a
 		>. It only needs the default read/write review scopes.
 	</p>
@@ -85,6 +107,22 @@
 		<label class="toggle">
 			<input
 				type="checkbox"
+				checked={$showPartsOfSpeech}
+				onchange={(event) => showPartsOfSpeech.set(event.currentTarget.checked)}
+			/>
+			Show part-of-speech labels on card backs
+		</label>
+		<label class="toggle">
+			<input
+				type="checkbox"
+				checked={$showSrsChanges}
+				onchange={(event) => showSrsChanges.set(event.currentTarget.checked)}
+			/>
+			Show SRS level changes after answering
+		</label>
+		<label class="toggle">
+			<input
+				type="checkbox"
 				checked={$reviewAudioSettings.autoplayAfterAnswer}
 				onchange={(event) => reviewAudioSettings.update({ autoplayAfterAnswer: event.currentTarget.checked })}
 			/>
@@ -103,6 +141,31 @@
 				oninput={(event) => reviewAudioSettings.update({ volume: Number(event.currentTarget.value) })}
 			/>
 		</label>
+	</section>
+
+	<section class="preferences" id="keybindings">
+		<h2>Keybindings</h2>
+		<p class="muted">Select a binding, then press the key you want. Press Escape to cancel.</p>
+		<div class="keybinding-list">
+			{#each keybindingActions as action (action.key)}
+				<div class="keybinding-row">
+					<div>
+						<div class="keybinding-label">{action.label}</div>
+						<div class="keybinding-hint">{action.hint}</div>
+					</div>
+					<button
+						type="button"
+						class="keybinding-key"
+						class:listening={listeningFor === action.key}
+						onclick={() => startListening(action.key)}
+						onkeydown={(event) => listeningFor === action.key && handleKeydown(event, action.key)}
+					>
+						{listeningFor === action.key ? 'Press a key...' : $keybindings[action.key]}
+					</button>
+				</div>
+			{/each}
+		</div>
+		<button type="button" onclick={() => keybindings.reset()}>Reset to defaults</button>
 	</section>
 
 	{#if error}<p class="error">{error}</p>{/if}
@@ -132,6 +195,44 @@
 
 	.preferences h2 {
 		font-size: 1.1rem;
+	}
+
+	.keybinding-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		margin: 1.25rem 0;
+	}
+
+	.keybinding-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.75rem 0;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.keybinding-label {
+		font-weight: 600;
+	}
+
+	.keybinding-hint {
+		color: var(--muted);
+		font-size: 0.85rem;
+	}
+
+	.keybinding-key {
+		min-width: 6rem;
+		text-transform: uppercase;
+		font-family: monospace;
+	}
+
+	.keybinding-key.listening {
+		border-color: var(--accent);
+		color: var(--accent);
+		text-transform: none;
+		font-family: inherit;
 	}
 
 	.toggle {

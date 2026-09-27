@@ -1,26 +1,21 @@
-import { browser } from '$app/environment';
 import { writable } from 'svelte/store';
+import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '$lib/safe-storage';
 
 const STORAGE_KEY = 'wk-flash:api-key';
 
 function createApiKeyStore() {
-	const initial = browser ? (localStorage.getItem(STORAGE_KEY) ?? '') : '';
+	const initial = readLocalStorage(STORAGE_KEY) ?? '';
 	const { subscribe, set } = writable<string>(initial);
 
 	return {
 		subscribe,
 		set(value: string) {
-			if (browser) {
-				if (value) {
-					localStorage.setItem(STORAGE_KEY, value);
-				} else {
-					localStorage.removeItem(STORAGE_KEY);
-				}
-			}
+			if (value) writeLocalStorage(STORAGE_KEY, value);
+			else removeLocalStorage(STORAGE_KEY);
 			set(value);
 		},
 		clear() {
-			if (browser) localStorage.removeItem(STORAGE_KEY);
+			removeLocalStorage(STORAGE_KEY);
 			set('');
 		}
 	};

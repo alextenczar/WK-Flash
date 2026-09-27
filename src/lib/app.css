@@ -100,3 +100,44 @@ input:focus {
 	margin: 0 auto;
 	padding: 1.5rem;
 }
+
+.srs-stage-notification {
+	position: absolute;
+	z-index: 4;
+	left: 0.65rem;
+	right: 0.65rem;
+	bottom: 0.65rem;
+	padding: 0.4rem 0.55rem;
+	border: 1px solid var(--good);
+	border-radius: 5px;
+	background: var(--good);
+	color: #102a18;
+	box-shadow: 0 3px 12px rgb(0 0 0 / 35%);
+	font-size: 0.75rem;
+	font-weight: 600;
+	line-height: 1.25;
+	text-align: center;
+	pointer-events: none;
+}
+
+.srs-stage-notification.decreased {
+	border-color: var(--bad);
+	background: var(--bad);
+	color: #fff;
+}
+
+.srs-stage-notification.unchanged {
+	border-color: var(--accent);
+	background: var(--accent);
+	color: #fff;
+}
+
+.srs-stage-notification--global {
+	position: fixed;
+	z-index: 20;
+	left: 50%;
+	right: auto;
+	bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+	width: min(600px, calc(100% - 2rem));
+	transform: translateX(-50%);
+}

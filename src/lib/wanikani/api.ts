@@ -11,6 +11,11 @@ export class WaniKaniError extends Error {
 	}
 }
 
+export interface ReviewStageResult {
+	startingSrsStage: number | null;
+	endingSrsStage: number | null;
+}
+
 async function wkFetch<T>(path: string, apiToken: string): Promise<T> {
 	const res = await fetch(`${BASE_URL}${path}`, {
 		headers: {
@@ -93,6 +98,7 @@ export async function buildReviewQueue(apiToken: string): Promise<ReviewCard[]> 
 		if (!subject) continue;
 		cards.push({
 			assignmentId: assignment.id,
+			srsStage: assignment.data.srs_stage,
 			subject,
 			// Radicals have no reading, and kana vocabulary is tested on meaning only.
 			needsReading: subject.object !== 'radical' && subject.object !== 'kana_vocabulary',
@@ -108,7 +114,7 @@ export async function submitReview(
 	assignmentId: number,
 	incorrectCount: number,
 	needsReading: boolean
-): Promise<void> {
+): Promise<ReviewStageResult> {
 	const res = await fetch(`${BASE_URL}/reviews`, {
 		method: 'POST',
 		headers: {
@@ -130,4 +136,13 @@ export async function submitReview(
 		const body = await res.text();
 		throw new WaniKaniError(`Failed to submit review (${res.status}): ${body}`, res.status);
 	}
+	const response = (await res.json().catch(() => null)) as {
+		data?: { starting_srs_stage?: number; ending_srs_stage?: number };
+		resources_updated?: { assignment?: { data?: { srs_stage?: number } } };
+	} | null;
+	return {
+		startingSrsStage: response?.data?.starting_srs_stage ?? null,
+		endingSrsStage:
+			response?.resources_updated?.assignment?.data?.srs_stage ?? response?.data?.ending_srs_stage ?? null
+	};
 }

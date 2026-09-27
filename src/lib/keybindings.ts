@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import { writable } from 'svelte/store';
+import { readLocalStorage, writeLocalStorage } from '$lib/safe-storage';
 
 const STORAGE_KEY = 'wk-flash:keybindings';
 
@@ -21,10 +22,15 @@ export const defaultKeybindings: Keybindings = {
 function createKeybindingsStore() {
 	let initial = defaultKeybindings;
 	if (browser) {
-		const stored = localStorage.getItem(STORAGE_KEY);
+		const stored = readLocalStorage(STORAGE_KEY);
 		if (stored) {
 			try {
-				initial = { ...defaultKeybindings, ...JSON.parse(stored) };
+				const parsed: Partial<Keybindings> = JSON.parse(stored);
+				initial = {
+					flip: typeof parsed.flip === 'string' ? parsed.flip : defaultKeybindings.flip,
+					correct: typeof parsed.correct === 'string' ? parsed.correct : defaultKeybindings.correct,
+					wrong: typeof parsed.wrong === 'string' ? parsed.wrong : defaultKeybindings.wrong
+				};
 			} catch {
 				initial = defaultKeybindings;
 			}
@@ -34,7 +40,7 @@ function createKeybindingsStore() {
 	const { subscribe, set, update } = writable<Keybindings>(initial);
 
 	function persist(value: Keybindings) {
-		if (browser) localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+		writeLocalStorage(STORAGE_KEY, JSON.stringify(value));
 		set(value);
 	}
 
