@@ -14,7 +14,7 @@
 	</p>
 
 	<section>
-		<h2>Using WaniKani</h2>
+		<h2>Using WK Flash</h2>
 		<p>
 			WK Flash connects to WaniKani through its API with a personal API token. It does not ask for
 			your WaniKani password. Keep your token private; it provides access to your account through the
