@@ -29,7 +29,13 @@
 				// The live count remains available if local storage is disabled.
 			}
 		} catch (e) {
-			error = e instanceof WaniKaniError ? e.message : 'Something went wrong.';
+			error = !navigator.onLine
+				? hasSavedReview
+					? 'You are offline. Your saved review is ready to continue.'
+					: 'You are offline. Connect to load your reviews.'
+				: e instanceof WaniKaniError
+					? e.message
+					: 'Something went wrong.';
 		} finally {
 			loading = false;
 		}

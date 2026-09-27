@@ -19,12 +19,14 @@
 		});
 		window.addEventListener('online', updateConnection);
 		window.addEventListener('offline', updateConnection);
+		window.addEventListener('focus', updateConnection);
 		updateConnection();
 
 		return () => {
 			unsubscribeApiKey();
 			window.removeEventListener('online', updateConnection);
 			window.removeEventListener('offline', updateConnection);
+			window.removeEventListener('focus', updateConnection);
 		};
 	});
 </script>
@@ -86,7 +88,7 @@
 
 	header {
 		border-bottom: 1px solid var(--border);
-		background: var(--surface);
+		background: var(--bg);
 	}
 
 	nav {

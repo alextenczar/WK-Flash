@@ -94,7 +94,29 @@ export function queueReviewSubmission(review: PendingReviewSubmission): void {
 	);
 }
 
+function removeQueuedReviewSubmission(assignmentId: number): void {
+	pendingReviews.update((reviews) => reviews.filter((item) => item.assignmentId !== assignmentId));
+}
+
 let syncing = false;
+const inFlightAssignmentIds = new Set<number>();
+
+export async function submitQueuedReview(apiToken: string, review: PendingReviewSubmission) {
+	queueReviewSubmission(review);
+	inFlightAssignmentIds.add(review.assignmentId);
+	try {
+		const result = await submitReview(
+			apiToken,
+			review.assignmentId,
+			review.incorrectCount,
+			review.needsReading
+		);
+		removeQueuedReviewSubmission(review.assignmentId);
+		return result;
+	} finally {
+		inFlightAssignmentIds.delete(review.assignmentId);
+	}
+}
 
 export async function syncPendingReviews(apiToken: string): Promise<void> {
 	if (!browser || !navigator.onLine || !apiToken || syncing) return;
@@ -102,6 +124,8 @@ export async function syncPendingReviews(apiToken: string): Promise<void> {
 	try {
 		for (const review of get(pendingReviews)) {
 			if (!navigator.onLine) break;
+			if (inFlightAssignmentIds.has(review.assignmentId)) continue;
+			inFlightAssignmentIds.add(review.assignmentId);
 			try {
 				const { startingSrsStage, endingSrsStage } = await submitReview(
 					apiToken,
@@ -119,8 +143,10 @@ export async function syncPendingReviews(apiToken: string): Promise<void> {
 				}
 			} catch {
 				break;
+			} finally {
+				inFlightAssignmentIds.delete(review.assignmentId);
 			}
-			pendingReviews.update((reviews) => reviews.filter((item) => item.assignmentId !== review.assignmentId));
+			removeQueuedReviewSubmission(review.assignmentId);
 		}
 	} finally {
 		syncing = false;

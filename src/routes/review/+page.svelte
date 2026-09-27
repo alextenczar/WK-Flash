@@ -6,13 +6,14 @@
 	import { showMnemonics, showPartsOfSpeech, showSrsChanges } from '$lib/review-preferences';
 	import { reviewAudioSettings } from '$lib/review-audio';
 	import { clearReviewSession, readReviewSession, saveReviewSession } from '$lib/review-session';
-	import { buildReviewQueue, getSubjectsByIds, submitReview, WaniKaniError } from '$lib/wanikani/api';
+	import { buildReviewQueue, getSubjectsByIds, WaniKaniError } from '$lib/wanikani/api';
 	import { allMeanings, primaryMeaning, readingsForDisplay, vocabularyByReading } from '$lib/wanikani/matching';
 	import {
 		formatSrsStageUpdate,
 		latestSrsStageUpdate,
 		queueReviewSubmission,
-		recordSrsStageUpdate
+		recordSrsStageUpdate,
+		submitQueuedReview
 	} from '$lib/review-outbox';
 	import type { ReviewCard, WKSubject } from '$lib/wanikani/types';
 
@@ -261,8 +262,7 @@
 	}
 
 	function endReview() {
-		phase = 'finished';
-		clearReviewSession();
+		saveCurrentSession();
 		goto('/');
 	}
 
@@ -304,11 +304,9 @@
 				queueReviewSubmission(reviewSubmission);
 			} else {
 				try {
-					const { startingSrsStage, endingSrsStage } = await submitReview(
+					const { startingSrsStage, endingSrsStage } = await submitQueuedReview(
 						$apiKey,
-						card.assignmentId,
-						card.incorrectCount,
-						card.needsReading
+						reviewSubmission
 					);
 					const startingStage = startingSrsStage ?? card.srsStage;
 					if ($showSrsChanges && startingStage !== undefined && endingSrsStage !== null) {
@@ -319,10 +317,8 @@
 						});
 					}
 				} catch (e) {
-					if (!(e instanceof WaniKaniError)) {
-						queueReviewSubmission(reviewSubmission);
-					} else {
-						error = e instanceof WaniKaniError ? e.message : 'Failed to submit a review to WaniKani.';
+					if (e instanceof WaniKaniError) {
+						error = `${e.message} The result is saved and will retry when connected.`;
 					}
 				}
 			}
