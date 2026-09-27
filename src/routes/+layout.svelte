@@ -45,6 +45,7 @@
 	<nav class="container">
 		<a href="/" class="brand">WK Flash</a>
 		<div class="links">
+			<a href="/analytics">Analytics</a>
 			<a href="/settings">Settings</a>
 			<a href="/about">About</a>
 		</div>
@@ -64,13 +65,13 @@
 {/if}
 
 {#if !isOnline || $pendingReviews.length > 0}
-	<div class="connection-status" role="status">
+	<!-- <div class="connection-status" role="status">
 		{#if !isOnline}
 			Offline. Saved review sessions are available, and completed answers will sync when you reconnect.
 		{:else if $pendingReviews.length > 0}
 			{$pendingReviews.length} completed review{$pendingReviews.length === 1 ? '' : 's'} waiting to sync.
 		{/if}
-	</div>
+	</div> -->
 {/if}
 
 <main>
@@ -105,6 +106,17 @@
 		a {
 			color: white;
 			text-decoration: none;
+		}
+	}
+
+	@media (max-width: 400px) {
+		nav {
+			gap: 0.75rem;
+		}
+
+		.links {
+			gap: 0.65rem;
+			font-size: 0.875rem;
 		}
 	}
 

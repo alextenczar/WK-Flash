@@ -18,6 +18,7 @@
 		pendingReviews,
 		queueReviewSubmission,
 		recordSrsStageUpdate,
+		syncPendingReviews,
 		submitQueuedReview
 	} from '$lib/review-outbox';
 	import type { ReviewCard, WKSubject } from '$lib/wanikani/types';
@@ -45,6 +46,7 @@
 	let correctFirstTry = $state(0);
 	let seenAssignments = new Set<number>();
 	let wrapUp = $state(false);
+	let endingReview = $state(false);
 
 	const current = $derived(queue[0] ?? null);
 	const similarKanji = $derived(relatedSubjects.filter((subject) => subject.object === 'kanji'));
@@ -253,7 +255,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	});
 
 	function onPageHide() {
-		saveCurrentSession();
+		if (!endingReview) saveCurrentSession();
 	}
 
 	function flip() {
@@ -289,13 +291,17 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		}
 	}
 
-	function endReview() {
-		saveCurrentSession();
-		goto('/');
+	async function endReview() {
+		if (endingReview) return;
+		endingReview = true;
+		if (navigator.onLine) await syncPendingReviews($apiKey);
+		if (navigator.onLine) clearReviewSession();
+		else saveCurrentSession();
+		await goto('/');
 	}
 
 	async function grade(wasCorrect: boolean) {
-		if (!current) return;
+		if (!current || endingReview) return;
 		error = '';
 		const card = current;
 		resetMoreInfo();
@@ -420,7 +426,9 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				<p class="muted">{completedCount} / {totalUnique} complete{wrapUp ? ' · finishing missed cards' : ''}</p>
 			</div>
 			<div class="session-actions">
-				<button class="finish-missed" onclick={endReview}>End review</button>
+				<button class="finish-missed" onclick={endReview} disabled={endingReview}>
+					{endingReview ? 'Ending...' : 'End review'}
+				</button>
 				{#if !wrapUp}
 					<button class="finish-missed" onclick={finishMissed}>
 						Wrap up ({missedIds.size})

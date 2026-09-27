@@ -10,6 +10,7 @@
 		REVIEW_QUEUE_FRESH_MS,
 		WaniKaniError
 	} from '$lib/wanikani/api';
+	import type { NextReviewBatch } from '$lib/wanikani/api';
 	import type { ReviewCard, WKUser } from '$lib/wanikani/types';
 
 	const REVIEW_COUNT_KEY = 'wk-flash:last-due-count';
@@ -18,17 +19,28 @@
 
 	let user = $state<WKUser | null>(null);
 	let reviewCount = $state<number | null>(null);
+	let nextReviewBatch = $state<NextReviewBatch | null | undefined>(undefined);
+	let now = $state(Date.now());
 	let hasSavedReview = $state(false);
 	let hasCachedReviewQueue = $state(false);
 	let loading = $state(true);
 	let error = $state('');
 	let loadingRequest = false;
+	let refreshedForBatch: string | null = null;
 
-	function showCachedQueue(cards: ReviewCard[], cachedUser?: WKUser) {
+	function showCachedQueue(
+		cards: ReviewCard[],
+		cachedUser?: WKUser,
+		serverReviewCount?: number,
+		upcomingBatch?: NextReviewBatch | null
+	) {
 		const pendingAssignmentIds = new Set($pendingReviews.map((review) => review.assignmentId));
 		const availableCards = cards.filter((card) => !pendingAssignmentIds.has(card.assignmentId));
 		if (cachedUser) user = cachedUser;
-		reviewCount = availableCards.length;
+		nextReviewBatch = upcomingBatch;
+		reviewCount = navigator.onLine && serverReviewCount !== undefined
+			? serverReviewCount
+			: availableCards.length;
 		hasCachedReviewQueue = availableCards.length > 0;
 		try {
 			localStorage.setItem(REVIEW_COUNT_KEY, String(reviewCount));
@@ -47,17 +59,20 @@
 			if (
 				!forceRefresh &&
 				cachedQueue &&
+				typeof cachedQueue.reviewCount === 'number' &&
+				cachedQueue.nextReviewBatch !== undefined &&
+				(!cachedQueue.nextReviewBatch || Date.parse(cachedQueue.nextReviewBatch.availableAt) > Date.now()) &&
 				Date.now() - cachedQueue.fetchedAt < REVIEW_QUEUE_FRESH_MS
 			) {
-				showCachedQueue(cachedQueue.cards, cachedQueue.user);
+				showCachedQueue(cachedQueue.cards, cachedQueue.user, cachedQueue.reviewCount, cachedQueue.nextReviewBatch);
 				return;
 			}
 			const overview = await getReviewOverview($apiKey);
 			user = overview.user;
-			showCachedQueue(overview.cards, overview.user);
+			showCachedQueue(overview.cards, overview.user, overview.reviewCount, overview.nextReviewBatch);
 		} catch (e) {
 			if (cachedQueue) {
-				showCachedQueue(cachedQueue.cards, cachedQueue.user);
+				showCachedQueue(cachedQueue.cards, cachedQueue.user, cachedQueue.reviewCount, cachedQueue.nextReviewBatch);
 				error = !navigator.onLine
 					? hasSavedReview
 						? 'You are offline. Your saved review is ready to continue.'
@@ -78,6 +93,18 @@
 
 	onMount(() => {
 		const handleOnline = () => void load(true);
+		const countdownTimer = window.setInterval(() => {
+			now = Date.now();
+			if (
+				nextReviewBatch &&
+				Date.parse(nextReviewBatch.availableAt) <= now &&
+				refreshedForBatch !== nextReviewBatch.availableAt &&
+				!loadingRequest
+			) {
+				refreshedForBatch = nextReviewBatch.availableAt;
+				void load(true);
+			}
+		}, 1000);
 		window.addEventListener('online', handleOnline);
 		void (async () => {
 			hasSavedReview = hasSavedReviewSession();
@@ -91,6 +118,7 @@
 				// Continue loading the live count if local storage is disabled.
 			}
 			const cachedQueue = await getCachedReviewQueue();
+			nextReviewBatch = cachedQueue?.nextReviewBatch;
 			const pendingAssignmentIds = new Set($pendingReviews.map((review) => review.assignmentId));
 			const availableCards = cachedQueue?.cards.filter(
 				(card) => !pendingAssignmentIds.has(card.assignmentId)
@@ -114,11 +142,39 @@
 			}
 			await load();
 		})();
-		return () => window.removeEventListener('online', handleOnline);
+		return () => {
+			window.clearInterval(countdownTimer);
+			window.removeEventListener('online', handleOnline);
+		};
 	});
+
+	function formatCountdown(availableAt: string): string {
+		const seconds = Math.max(0, Math.ceil((Date.parse(availableAt) - now) / 1000));
+		const hours = Math.floor(seconds / 3600);
+		const minutes = Math.floor((seconds % 3600) / 60);
+		const remainingSeconds = seconds % 60;
+		return [hours, minutes, remainingSeconds].map((value) => String(value).padStart(2, '0')).join(':');
+	}
 </script>
 
 <div class="container">
+	{#if nextReviewBatch !== undefined}
+		<section class="next-review-batch" aria-label="Upcoming reviews">
+			{#if nextReviewBatch}
+				{#if Date.parse(nextReviewBatch.availableAt) > now}
+					<p>
+						<strong>{nextReviewBatch.count}</strong> review{nextReviewBatch.count === 1 ? '' : 's'} coming in
+						<time datetime={nextReviewBatch.availableAt}>{formatCountdown(nextReviewBatch.availableAt)}</time>
+					</p>
+				{:else}
+					<p><strong>{nextReviewBatch.count}</strong> upcoming review{nextReviewBatch.count === 1 ? '' : 's'} available now.</p>
+				{/if}
+			{:else}
+				<p>No more reviews are queued in the next 24 hours.</p>
+			{/if}
+		</section>
+	{/if}
+
 	{#if loading}
 		<p>
 			{reviewCount === null
@@ -165,6 +221,21 @@
 </div>
 
 <style>
+	.next-review-batch {
+		margin-bottom: 1.5rem;
+		padding: 0.25rem 0 0.25rem 0.75rem;
+		border-left: 3px solid var(--accent);
+	}
+
+	.next-review-batch p {
+		margin: 0;
+	}
+
+	.next-review-batch time {
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+	}
+
 	.error {
 		color: var(--bad);
 	}

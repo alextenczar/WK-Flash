@@ -56,10 +56,6 @@
 </div>
 
 <style>
-	.about-content {
-		max-width: 760px;
-	}
-
 	section {
 		margin-top: 2rem;
 	}

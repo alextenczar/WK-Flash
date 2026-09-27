@@ -8,9 +8,16 @@ const MAX_RATE_LIMIT_RETRIES = 2;
 const REVIEW_QUEUE_CACHE_PATH = '/__wk-flash-cache/review-queue';
 export const REVIEW_QUEUE_FRESH_MS = 60 * 1000;
 
+export interface NextReviewBatch {
+	availableAt: string;
+	count: number;
+}
+
 export interface CachedReviewQueue {
 	fetchedAt: number;
 	cards: ReviewCard[];
+	reviewCount?: number;
+	nextReviewBatch?: NextReviewBatch | null;
 	user: WKUser;
 }
 
@@ -82,7 +89,13 @@ export async function getCachedReviewQueue(): Promise<CachedReviewQueue | null> 
 			!Array.isArray(snapshot.cards) ||
 			!snapshot.cards.every(
 				(card) => typeof card?.assignmentId === 'number' && typeof card.subject?.data === 'object'
-			)
+			) ||
+			(snapshot.nextReviewBatch !== undefined &&
+				snapshot.nextReviewBatch !== null &&
+				(typeof snapshot.nextReviewBatch.availableAt !== 'string' ||
+					!Number.isFinite(Date.parse(snapshot.nextReviewBatch.availableAt)) ||
+					!Number.isInteger(snapshot.nextReviewBatch.count) ||
+					snapshot.nextReviewBatch.count < 0))
 		) {
 			return null;
 		}
@@ -92,13 +105,26 @@ export async function getCachedReviewQueue(): Promise<CachedReviewQueue | null> 
 	}
 }
 
-async function cacheReviewQueue(cards: ReviewCard[], user: WKUser): Promise<void> {
+async function cacheReviewQueue(
+	cards: ReviewCard[],
+	user: WKUser,
+	reviewCount: number,
+	nextReviewBatch?: NextReviewBatch | null
+): Promise<void> {
 	const cache = await openSubjectCache();
 	if (!cache) return;
 	try {
+		const previous = nextReviewBatch === undefined ? await getCachedReviewQueue() : null;
+		const cachedNextReviewBatch = nextReviewBatch === undefined ? previous?.nextReviewBatch : nextReviewBatch;
 		await cache.put(
 			reviewQueueCacheRequest(),
-			new Response(JSON.stringify({ fetchedAt: Date.now(), cards, user } satisfies CachedReviewQueue), {
+			new Response(JSON.stringify({
+				fetchedAt: Date.now(),
+				cards,
+				reviewCount,
+				user,
+				...(cachedNextReviewBatch !== undefined ? { nextReviewBatch: cachedNextReviewBatch } : {})
+			} satisfies CachedReviewQueue), {
 				headers: { 'Content-Type': 'application/json' }
 			})
 		);
@@ -208,6 +234,20 @@ export async function getReviewAssignments(
 	return wkFetchAllPages<WKAssignment>(reviewAssignmentsPath(maxAccessibleLevel), apiToken);
 }
 
+export async function getJLPTKanjiProgressData(apiToken: string): Promise<{
+	subjects: WKSubject[];
+	assignments: WKAssignment[];
+}> {
+	const user = await getUser(apiToken);
+	const maxAccessibleLevel = Math.min(user.level, user.subscription.max_level_granted);
+	const levels = accessibleLevels(maxAccessibleLevel);
+	const [subjects, assignments] = await Promise.all([
+		wkFetchAllPages<WKSubject>(`/subjects?types=kanji&levels=${levels}`, apiToken),
+		wkFetchAllPages<WKAssignment>(`/assignments?subject_types=kanji&levels=${levels}`, apiToken)
+	]);
+	return { subjects, assignments };
+}
+
 export async function getSubjectsByIds(
 	apiToken: string,
 	ids: number[],
@@ -282,6 +322,7 @@ async function getAccessibleAssignments(apiToken: string): Promise<{
 async function getAccessibleReviewData(apiToken: string): Promise<{
 	user: WKUser;
 	assignments: WKAssignment[];
+	reviewCount: number;
 	subjectById: Map<number, WKSubject>;
 	maxAccessibleLevel: number;
 }> {
@@ -294,6 +335,7 @@ async function getAccessibleReviewData(apiToken: string): Promise<{
 	const subjectById = new Map(subjects.map((subject) => [subject.id, subject]));
 	return {
 		user,
+		reviewCount: assignments.length,
 		assignments: assignments.filter((assignment) => subjectById.has(assignment.data.subject_id)),
 		subjectById,
 		maxAccessibleLevel
@@ -323,18 +365,43 @@ export async function getReviewOverview(apiToken: string): Promise<{
 	user: WKUser;
 	reviewCount: number;
 	cards: ReviewCard[];
+	nextReviewBatch: NextReviewBatch | null | undefined;
 }> {
-	const { user, assignments, subjectById, maxAccessibleLevel } = await getAccessibleReviewData(apiToken);
+	const [reviewData, nextBatch] = await Promise.all([
+		getAccessibleReviewData(apiToken),
+		getNextReviewBatch(apiToken)
+	]);
+	const { user, assignments, reviewCount, subjectById, maxAccessibleLevel } = reviewData;
+	const nextReviewBatch = nextBatch === undefined
+		? (await getCachedReviewQueue())?.nextReviewBatch
+		: nextBatch;
 	const cards = reviewCardsFromData(assignments, subjectById, maxAccessibleLevel);
-	await cacheReviewQueue(cards, user);
-	return { user, reviewCount: assignments.length, cards };
+	await cacheReviewQueue(cards, user, reviewCount, nextReviewBatch);
+	return { user, reviewCount, cards, nextReviewBatch };
+}
+
+async function getNextReviewBatch(apiToken: string): Promise<NextReviewBatch | null | undefined> {
+	try {
+		const summary = await wkFetch<{
+			data: { reviews: { available_at: string; subject_ids: number[] }[] };
+		}>('/summary', apiToken);
+		const now = Date.now();
+		const nextBatch = summary.data.reviews
+			.filter((batch) => batch.subject_ids.length > 0 && Date.parse(batch.available_at) > now)
+			.sort((left, right) => Date.parse(left.available_at) - Date.parse(right.available_at))[0];
+		return nextBatch
+			? { availableAt: nextBatch.available_at, count: nextBatch.subject_ids.length }
+			: null;
+	} catch {
+		return undefined;
+	}
 }
 
 /** Builds the combined meaning+reading review queue for every currently available review. */
 export async function buildReviewQueue(apiToken: string): Promise<ReviewCard[]> {
-	const { user, assignments, subjectById, maxAccessibleLevel } = await getAccessibleReviewData(apiToken);
+	const { user, assignments, reviewCount, subjectById, maxAccessibleLevel } = await getAccessibleReviewData(apiToken);
 	const cards = reviewCardsFromData(assignments, subjectById, maxAccessibleLevel);
-	await cacheReviewQueue(cards, user);
+	await cacheReviewQueue(cards, user, reviewCount);
 	return cards;
 }
 
