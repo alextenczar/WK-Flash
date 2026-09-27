@@ -652,12 +652,24 @@
 		}
 
 		.level-tabs button {
+			min-width: 0;
 			min-height: 84px;
+			grid-template-rows: auto auto 3px;
 			padding: 0.55rem 0.45rem;
 		}
 
 		.level-count {
-			font-size: 0.7rem;
+			font-size: 0.62rem;
+		}
+
+		.progress-track,
+		.progress-fill {
+			height: 3px;
+		}
+
+		.progress-marker {
+			top: -2px;
+			height: 8px;
 		}
 
 		.kanji-list li {
