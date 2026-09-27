@@ -119,11 +119,27 @@ export async function getUser(apiToken: string): Promise<WKUser> {
 	return json.data;
 }
 
-export async function getReviewAssignments(apiToken: string): Promise<WKAssignment[]> {
-	return wkFetchAllPages<WKAssignment>(
-		'/assignments?immediately_available_for_review=true',
+function accessibleLevels(maxAccessibleLevel: number): string {
+	return Array.from({ length: maxAccessibleLevel }, (_, index) => index + 1).join(',');
+}
+
+function reviewAssignmentsPath(maxAccessibleLevel: number): string {
+	return `/assignments?immediately_available_for_review=true&levels=${accessibleLevels(maxAccessibleLevel)}`;
+}
+
+export async function getReviewAssignments(
+	apiToken: string,
+	maxAccessibleLevel: number
+): Promise<WKAssignment[]> {
+	return wkFetchAllPages<WKAssignment>(reviewAssignmentsPath(maxAccessibleLevel), apiToken);
+}
+
+async function getReviewAssignmentCount(apiToken: string, maxAccessibleLevel: number): Promise<number> {
+	const collection = await wkFetch<{ total_count: number }>(
+		reviewAssignmentsPath(maxAccessibleLevel),
 		apiToken
 	);
+	return collection.total_count;
 }
 
 export async function getSubjectsByIds(
@@ -169,7 +185,7 @@ export async function getSubjectsByIds(
 		const chunk = idsToFetch.slice(i, i + chunkSize);
 		const levelFilter = maxAccessibleLevel === undefined
 			? ''
-			: `&levels=${Array.from({ length: maxAccessibleLevel }, (_, index) => index + 1).join(',')}`;
+			: `&levels=${accessibleLevels(maxAccessibleLevel)}`;
 		const chunkSubjects = await wkFetchAllPages<WKSubject>(
 			`/subjects?ids=${chunk.join(',')}${levelFilter}`,
 			apiToken
@@ -186,17 +202,24 @@ export async function getSubjectsByIds(
 	});
 }
 
+async function getAccessibleAssignments(apiToken: string): Promise<{
+	user: WKUser;
+	assignments: WKAssignment[];
+	maxAccessibleLevel: number;
+}> {
+	const user = await getUser(apiToken);
+	const maxAccessibleLevel = Math.min(user.level, user.subscription.max_level_granted);
+	const assignments = await getReviewAssignments(apiToken, maxAccessibleLevel);
+	return { user, assignments, maxAccessibleLevel };
+}
+
 async function getAccessibleReviewData(apiToken: string): Promise<{
 	user: WKUser;
 	assignments: WKAssignment[];
 	subjectById: Map<number, WKSubject>;
 	maxAccessibleLevel: number;
 }> {
-	const [user, assignments] = await Promise.all([
-		getUser(apiToken),
-		getReviewAssignments(apiToken)
-	]);
-	const maxAccessibleLevel = Math.min(user.level, user.subscription.max_level_granted);
+	const { user, assignments, maxAccessibleLevel } = await getAccessibleAssignments(apiToken);
 	const subjects = await getSubjectsByIds(
 		apiToken,
 		assignments.map((assignment) => assignment.data.subject_id),
@@ -212,8 +235,10 @@ async function getAccessibleReviewData(apiToken: string): Promise<{
 }
 
 export async function getReviewOverview(apiToken: string): Promise<{ user: WKUser; reviewCount: number }> {
-	const { user, assignments } = await getAccessibleReviewData(apiToken);
-	return { user, reviewCount: assignments.length };
+	const user = await getUser(apiToken);
+	const maxAccessibleLevel = Math.min(user.level, user.subscription.max_level_granted);
+	const reviewCount = await getReviewAssignmentCount(apiToken, maxAccessibleLevel);
+	return { user, reviewCount };
 }
 
 /** Builds the combined meaning+reading review queue for every currently available review. */
