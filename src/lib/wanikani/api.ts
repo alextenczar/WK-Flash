@@ -186,20 +186,42 @@ export async function getSubjectsByIds(
 	});
 }
 
-/** Builds the combined meaning+reading review queue for every currently available review. */
-export async function buildReviewQueue(apiToken: string): Promise<ReviewCard[]> {
+async function getAccessibleReviewData(apiToken: string): Promise<{
+	user: WKUser;
+	assignments: WKAssignment[];
+	subjectById: Map<number, WKSubject>;
+	maxAccessibleLevel: number;
+}> {
 	const [user, assignments] = await Promise.all([
 		getUser(apiToken),
 		getReviewAssignments(apiToken)
 	]);
 	const maxAccessibleLevel = Math.min(user.level, user.subscription.max_level_granted);
-	const accessibleAssignments = assignments.filter((assignment) => assignment.data.level <= maxAccessibleLevel);
-	const subjectIds = accessibleAssignments.map((assignment) => assignment.data.subject_id);
-	const subjects = await getSubjectsByIds(apiToken, subjectIds);
-	const subjectById = new Map(subjects.map((s) => [s.id, s]));
+	const subjects = await getSubjectsByIds(
+		apiToken,
+		assignments.map((assignment) => assignment.data.subject_id),
+		maxAccessibleLevel
+	);
+	const subjectById = new Map(subjects.map((subject) => [subject.id, subject]));
+	return {
+		user,
+		assignments: assignments.filter((assignment) => subjectById.has(assignment.data.subject_id)),
+		subjectById,
+		maxAccessibleLevel
+	};
+}
+
+export async function getReviewOverview(apiToken: string): Promise<{ user: WKUser; reviewCount: number }> {
+	const { user, assignments } = await getAccessibleReviewData(apiToken);
+	return { user, reviewCount: assignments.length };
+}
+
+/** Builds the combined meaning+reading review queue for every currently available review. */
+export async function buildReviewQueue(apiToken: string): Promise<ReviewCard[]> {
+	const { assignments, subjectById, maxAccessibleLevel } = await getAccessibleReviewData(apiToken);
 
 	const cards: ReviewCard[] = [];
-	for (const assignment of accessibleAssignments) {
+	for (const assignment of assignments) {
 		const subject = subjectById.get(assignment.data.subject_id);
 		if (!subject) continue;
 		cards.push({

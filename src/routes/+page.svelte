@@ -3,12 +3,12 @@
 	import { onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
 	import { hasSavedReviewSession } from '$lib/review-session';
-	import { getUser, getReviewAssignments, WaniKaniError } from '$lib/wanikani/api';
+	import { getReviewOverview, WaniKaniError } from '$lib/wanikani/api';
 	import type { WKUser } from '$lib/wanikani/types';
 
 	const REVIEW_COUNT_KEY = 'wk-flash:last-due-count';
 	const hour = new Date().getHours();
-	const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+	const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
 	let user = $state<WKUser | null>(null);
 	let reviewCount = $state<number | null>(null);
@@ -20,13 +20,9 @@
 		loading = true;
 		error = '';
 		try {
-			const [u, assignments] = await Promise.all([
-				getUser($apiKey),
-				getReviewAssignments($apiKey)
-			]);
-			user = u;
-		const maxAccessibleLevel = Math.min(u.level, u.subscription.max_level_granted);
-			reviewCount = assignments.filter((assignment) => assignment.data.level <= maxAccessibleLevel).length;
+			const overview = await getReviewOverview($apiKey);
+			user = overview.user;
+			reviewCount = overview.reviewCount;
 			try {
 				localStorage.setItem(REVIEW_COUNT_KEY, String(reviewCount));
 			} catch {
@@ -91,7 +87,7 @@
 		{#if hasSavedReview}
 			<p>You have a review in progress. Pick up where you left off.</p>
 			<a href="/review"><button class="primary">Continue Review</button></a>
-		{:else if reviewCount > 0}
+		{:else if reviewCount !== null && reviewCount > 0}
 			<p class="muted">
 				Each card asks for the meaning and reading together, then submits one combined result back
 				to WaniKani.

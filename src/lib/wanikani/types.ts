@@ -50,7 +50,6 @@ export interface WKAssignment {
 	data: {
 		subject_id: number;
 		subject_type: SubjectType;
-		level: number;
 		srs_stage: number;
 		available_at: string | null;
 	};
