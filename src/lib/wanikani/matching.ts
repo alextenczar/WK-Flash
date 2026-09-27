@@ -37,3 +37,23 @@ export function readingsForDisplay(
 
 	return [...groups].map(([type, readings]) => ({ type, readings }));
 }
+
+export function vocabularyByReading(
+	subjects: WKSubject[]
+): { reading: string; subjects: WKSubject[] }[] {
+	const groups = new Map<string, WKSubject[]>();
+
+	for (const subject of subjects) {
+		if (subject.object !== 'vocabulary' && subject.object !== 'kana_vocabulary') continue;
+		const readings = new Set((subject.data.readings ?? []).map((item) => item.reading));
+		for (const reading of readings) {
+			const group = groups.get(reading) ?? [];
+			group.push(subject);
+			groups.set(reading, group);
+		}
+	}
+
+	return [...groups]
+		.sort(([first], [second]) => first.localeCompare(second, 'ja'))
+		.map(([reading, groupedSubjects]) => ({ reading, subjects: groupedSubjects }));
+}

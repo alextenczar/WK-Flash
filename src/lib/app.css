@@ -1,13 +1,13 @@
 :root {
-	color-scheme: light dark;
-	--bg: #12141a;
-	--surface: #1c1f28;
-	--surface-alt: #262a36;
-	--border: #333747;
-	--text: #eef0f5;
-	--muted: #9aa1b3;
-	--accent: #5b8cff;
-	--accent-hover: #7ba0ff;
+	color-scheme: dark;
+	--bg: #000000;
+	--surface: #0d0d0f;
+	--surface-alt: #18181b;
+	--border: #303034;
+	--text: #f2f2f3;
+	--muted: #a1a1aa;
+	--accent: #3b82f6;
+	--accent-hover: #60a5fa;
 	--good: #3fbf6a;
 	--bad: #e5484d;
 	font-family:
@@ -22,10 +22,24 @@
 }
 
 body {
+	display: flex;
+	flex-direction: column;
 	margin: 0;
 	background: var(--bg);
 	color: var(--text);
 	min-height: 100vh;
+	min-height: 100dvh;
+}
+
+main {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-height: 0;
+}
+
+html {
+	background: var(--bg);
 }
 
 a {
@@ -44,8 +58,14 @@ button {
 	transition: background-color 0.15s ease;
 }
 
-button:hover:not(:disabled) {
-	background: var(--border);
+@media (hover: hover) {
+	button:hover:not(:disabled) {
+		background: transparent;
+	}
+
+	button.primary:hover:not(:disabled) {
+		background: transparent;
+	}
 }
 
 button:disabled {
@@ -57,10 +77,6 @@ button.primary {
 	background: var(--accent);
 	border-color: var(--accent);
 	color: #fff;
-}
-
-button.primary:hover:not(:disabled) {
-	background: var(--accent-hover);
 }
 
 input[type='text'],

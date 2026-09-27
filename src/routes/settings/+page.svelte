@@ -3,6 +3,7 @@
 	import { apiKey } from '$lib/storage';
 	import { showMnemonics } from '$lib/review-preferences';
 	import { clearReviewSession } from '$lib/review-session';
+	import { reviewAudioSettings } from '$lib/review-audio';
 	import { getUser, WaniKaniError } from '$lib/wanikani/api';
 
 	let input = $state($apiKey);
@@ -81,6 +82,27 @@
 			/>
 			Show mnemonics on card backs
 		</label>
+		<label class="toggle">
+			<input
+				type="checkbox"
+				checked={$reviewAudioSettings.autoplayAfterAnswer}
+				onchange={(event) => reviewAudioSettings.update({ autoplayAfterAnswer: event.currentTarget.checked })}
+			/>
+			Play pronunciation after answering
+		</label>
+		<label class="volume-setting" for="audio-volume">
+			<span>Pronunciation volume</span>
+			<span class="volume-value">{Math.round($reviewAudioSettings.volume * 100)}%</span>
+			<input
+				id="audio-volume"
+				type="range"
+				min="0"
+				max="1"
+				step="0.05"
+				value={$reviewAudioSettings.volume}
+				oninput={(event) => reviewAudioSettings.update({ volume: Number(event.currentTarget.value) })}
+			/>
+		</label>
 	</section>
 
 	{#if error}<p class="error">{error}</p>{/if}
@@ -122,6 +144,25 @@
 		width: 1.1rem;
 		height: 1.1rem;
 		accent-color: var(--accent);
+	}
+
+	.volume-setting {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		align-items: center;
+		gap: 0.5rem 1rem;
+		margin-top: 1rem;
+	}
+
+	.volume-setting input {
+		grid-column: 1 / -1;
+		width: 100%;
+		accent-color: var(--accent);
+	}
+
+	.volume-value {
+		color: var(--muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.muted {

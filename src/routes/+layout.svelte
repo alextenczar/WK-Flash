@@ -7,6 +7,13 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
+	<link rel="manifest" href="/manifest.webmanifest" />
+	<link rel="apple-touch-icon" href="/wk-flash-icon.svg" />
+	<meta name="theme-color" content="#000000" />
+	<meta name="apple-mobile-web-app-capable" content="yes" />
+	<meta name="apple-mobile-web-app-title" content="WK Flash" />
+	<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+	<title>WK Flash</title>
 </svelte:head>
 
 <header>
@@ -40,6 +47,10 @@
 	.links {
 		display: flex;
 		gap: 1.25rem;
+		a {
+			color: white;
+			text-decoration: none;
+		}
 	}
 
 	.brand {

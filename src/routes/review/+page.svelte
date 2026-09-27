@@ -4,10 +4,11 @@
 	import { apiKey } from '$lib/storage';
 	import { keybindings } from '$lib/keybindings';
 	import { showMnemonics } from '$lib/review-preferences';
+	import { reviewAudioSettings } from '$lib/review-audio';
 	import { clearReviewSession, readReviewSession, saveReviewSession } from '$lib/review-session';
-	import { buildReviewQueue, submitReview, WaniKaniError } from '$lib/wanikani/api';
-	import { allMeanings, readingsForDisplay } from '$lib/wanikani/matching';
-	import type { ReviewCard } from '$lib/wanikani/types';
+	import { buildReviewQueue, getSubjectsByIds, submitReview, WaniKaniError } from '$lib/wanikani/api';
+	import { allMeanings, primaryMeaning, readingsForDisplay, vocabularyByReading } from '$lib/wanikani/matching';
+	import type { ReviewCard, WKSubject } from '$lib/wanikani/types';
 
 	type Phase = 'loading' | 'question' | 'finished' | 'error';
 
@@ -16,9 +17,15 @@
 	let audioError = $state('');
 	let flipped = $state(false);
 	let audioPlayer: HTMLAudioElement | null = null;
+	let moreInfoOpen = $state(false);
+	let moreInfoLoading = $state(false);
+	let moreInfoError = $state('');
+	let moreInfoLoadedFor = $state<number | null>(null);
+	let relatedSubjects = $state<WKSubject[]>([]);
 
 	let queue = $state<ReviewCard[]>([]);
 	let totalUnique = $state(0);
+	let knownAssignmentIds = new Set<number>();
 	let pendingIds = $state(new Set<number>());
 	let missedIds = $state(new Set<number>());
 	let completedCount = $state(0);
@@ -27,6 +34,52 @@
 	let wrapUp = $state(false);
 
 	const current = $derived(queue[0] ?? null);
+	const similarKanji = $derived(relatedSubjects.filter((subject) => subject.object === 'kanji'));
+	const vocabularyGroups = $derived(vocabularyByReading(relatedSubjects));
+
+	function resetMoreInfo() {
+		moreInfoOpen = false;
+		moreInfoLoading = false;
+		moreInfoError = '';
+		moreInfoLoadedFor = null;
+		relatedSubjects = [];
+	}
+
+	async function toggleMoreInfo() {
+		if (!current) return;
+		moreInfoOpen = !moreInfoOpen;
+		if (!moreInfoOpen || moreInfoLoadedFor === current.subject.id || moreInfoLoading) return;
+
+		const subject = current.subject;
+		const relatedIds = subject.object === 'kanji'
+			? [
+				...(subject.data.visually_similar_subject_ids ?? []),
+				...(subject.data.amalgamation_subject_ids ?? [])
+			]
+			: subject.object === 'radical'
+				? (subject.data.amalgamation_subject_ids ?? [])
+				: [];
+		const uniqueIds = [...new Set(relatedIds)].filter((id) => id !== subject.id);
+
+		moreInfoError = '';
+		if (uniqueIds.length === 0) {
+			relatedSubjects = [];
+			moreInfoLoadedFor = subject.id;
+			return;
+		}
+
+		moreInfoLoading = true;
+		try {
+			const fetchedSubjects = await getSubjectsByIds($apiKey, uniqueIds);
+			if (current?.subject.id !== subject.id) return;
+			relatedSubjects = fetchedSubjects;
+			moreInfoLoadedFor = subject.id;
+		} catch {
+			if (current?.subject.id === subject.id) moreInfoError = 'Could not load related WaniKani items.';
+		} finally {
+			if (current?.subject.id === subject.id) moreInfoLoading = false;
+		}
+	}
 
 	function saveCurrentSession() {
 		if (phase !== 'question' || queue.length === 0) {
@@ -37,6 +90,7 @@
 			version: 1,
 			queue,
 			totalUnique,
+			knownAssignmentIds: [...knownAssignmentIds],
 			pendingIds: [...pendingIds],
 			missedIds: [...missedIds],
 			seenAssignments: [...seenAssignments],
@@ -53,6 +107,13 @@
 
 		queue = saved.queue;
 		totalUnique = saved.totalUnique;
+		knownAssignmentIds = new Set(
+			saved.knownAssignmentIds ?? [
+				...saved.pendingIds,
+				...saved.seenAssignments,
+				...saved.queue.map((card) => card.assignmentId)
+			]
+		);
 		pendingIds = new Set(saved.pendingIds);
 		missedIds = new Set(saved.missedIds);
 		seenAssignments = new Set(saved.seenAssignments);
@@ -62,6 +123,30 @@
 		flipped = saved.flipped;
 		phase = 'question';
 		return true;
+	}
+
+	async function addNewDueReviews() {
+		if (wrapUp || phase !== 'question') return;
+		try {
+			const availableCards = await buildReviewQueue($apiKey);
+			if (wrapUp || phase !== 'question') return;
+			const newCards = availableCards.filter((card) => !knownAssignmentIds.has(card.assignmentId));
+			if (newCards.length === 0) return;
+
+			queue = [...queue, ...shuffle(newCards)];
+			const nextKnownIds = new Set(knownAssignmentIds);
+			const nextPendingIds = new Set(pendingIds);
+			for (const card of newCards) {
+				nextKnownIds.add(card.assignmentId);
+				nextPendingIds.add(card.assignmentId);
+			}
+			knownAssignmentIds = nextKnownIds;
+			pendingIds = nextPendingIds;
+			totalUnique += newCards.length;
+			saveCurrentSession();
+		} catch {
+			// Keep the saved queue usable if the due-review refresh is offline.
+		}
 	}
 
 	function shuffle<T>(arr: T[]): T[] {
@@ -86,6 +171,7 @@
 			}
 			queue = shuffle(cards);
 			totalUnique = queue.length;
+			knownAssignmentIds = new Set(queue.map((card) => card.assignmentId));
 			pendingIds = new Set(queue.map((c) => c.assignmentId));
 			missedIds = new Set();
 			seenAssignments = new Set();
@@ -106,7 +192,11 @@
 			goto('/settings');
 			return;
 		}
-		if (!restoreReviewSession()) load();
+		if (restoreReviewSession()) {
+			void addNewDueReviews();
+		} else {
+			load();
+		}
 	});
 
 	function onPageHide() {
@@ -118,19 +208,23 @@
 		saveCurrentSession();
 	}
 
-	function playAudio() {
-		const url = current?.subject.data.pronunciation_audios?.[0]?.url;
+	function playAudio(subject = current?.subject) {
+		const url = subject?.data.pronunciation_audios?.[0]?.url;
 		if (!url) return;
 
 		audioError = '';
 		audioPlayer?.pause();
+		const audioSession = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+		if (audioSession) audioSession.type = 'ambient';
 		audioPlayer = new Audio(url);
+		audioPlayer.volume = $reviewAudioSettings.volume;
 		void audioPlayer.play().catch(() => {
 			audioError = 'Unable to play audio.';
 		});
 	}
 
 	function finishMissed() {
+		resetMoreInfo();
 		wrapUp = true;
 		queue = queue.filter((card) => missedIds.has(card.assignmentId));
 		flipped = false;
@@ -143,6 +237,7 @@
 	}
 
 	function endReview() {
+		phase = 'finished';
 		clearReviewSession();
 		goto('/');
 	}
@@ -150,6 +245,7 @@
 	async function grade(wasCorrect: boolean) {
 		if (!current) return;
 		const card = current;
+		resetMoreInfo();
 		flipped = false;
 
 		const isFirstAttempt = !seenAssignments.has(card.assignmentId);
@@ -160,6 +256,7 @@
 			missedIds = new Set(missedIds).add(card.assignmentId);
 		}
 		if (isFirstAttempt && wasCorrect) correctFirstTry += 1;
+		if ($reviewAudioSettings.autoplayAfterAnswer) playAudio(card.subject);
 
 		if (wasCorrect) {
 			queue = queue.slice(1);
@@ -215,7 +312,7 @@
 
 <svelte:window onkeydown={handleKeydown} onpagehide={onPageHide} />
 
-<div class="container">
+<div class="container review-container">
 	{#if phase === 'loading'}
 		<p>Loading review queue...</p>
 	{:else if phase === 'error'}
@@ -255,7 +352,12 @@
 			</div>
 		</div>
 
-		<div class="card">
+		<div
+			class="card"
+			class:radical-card={current.subject.object === 'radical'}
+			class:kanji-card={current.subject.object === 'kanji'}
+			class:vocabulary-card={current.subject.object === 'vocabulary' || current.subject.object === 'kana_vocabulary'}
+		>
 			<div class="characters" class:small={!current.subject.data.characters}>
 				{#if current.subject.data.characters}
 					{current.subject.data.characters}
@@ -273,12 +375,16 @@
 			<div class="card-actions">
 				{#if !flipped}
 					<button class="primary flip-button" onclick={flip}>
-						Flip ({$keybindings.flip})
+						Flip <span class="shortcut" aria-hidden="true">({$keybindings.flip})</span>
 					</button>
 				{:else}
 					<div class="grade-buttons">
-						<button class="wrong" onclick={() => grade(false)}>Wrong ({$keybindings.wrong})</button>
-						<button class="correct" onclick={() => grade(true)}>Correct ({$keybindings.correct})</button>
+						<button class="wrong" onclick={() => grade(false)}>
+							Wrong <span class="shortcut" aria-hidden="true">({$keybindings.wrong})</span>
+						</button>
+						<button class="correct" onclick={() => grade(true)}>
+							Correct <span class="shortcut" aria-hidden="true">({$keybindings.correct})</span>
+						</button>
 					</div>
 				{/if}
 			</div>
@@ -287,7 +393,7 @@
 				<div class="back">
 					{#if current.subject.data.pronunciation_audios?.length}
 						<section class="audio-section">
-							<button type="button" onclick={playAudio}>Play audio</button>
+							<button type="button" onclick={() => playAudio()}>Play audio</button>
 							{#if audioError}<p class="audio-error" role="status">{audioError}</p>{/if}
 						</section>
 					{/if}
@@ -316,6 +422,85 @@
 							{/each}
 						</p>
 					</section>
+
+					<button
+						class="more-info-toggle"
+						type="button"
+						aria-expanded={moreInfoOpen}
+						onclick={() => void toggleMoreInfo()}
+					>
+						{moreInfoOpen ? 'Hide more information' : 'More information'}
+					</button>
+
+					{#if moreInfoOpen}
+						<div class="more-info">
+							{#if moreInfoLoading}
+								<p class="muted">Loading related items...</p>
+							{:else if moreInfoError}
+								<p class="error" role="status">{moreInfoError} Close and reopen to retry.</p>
+							{:else if current.subject.object === 'kanji'}
+								<section>
+									<h3>Similar kanji</h3>
+									{#if similarKanji.length}
+										<div class="related-items">
+											{#each similarKanji as subject (subject.id)}
+												<span class="related-item">
+													<strong>{subject.data.characters ?? subject.data.slug}</strong>
+													{primaryMeaning(subject)}
+												</span>
+											{/each}
+										</div>
+									{:else}
+										<p class="muted">No similar kanji listed.</p>
+									{/if}
+								</section>
+								<section>
+									<h3>Vocabulary by reading</h3>
+									{#if vocabularyGroups.length}
+										{#each vocabularyGroups as group (group.reading)}
+											<p>
+												<span class="reading-type">{group.reading}:</span>
+												{#each group.subjects as subject, index (subject.id)}
+													<strong>{subject.data.characters ?? subject.data.slug}</strong>
+													{index < group.subjects.length - 1 ? ', ' : ''}
+												{/each}
+											</p>
+										{/each}
+									{:else}
+										<p class="muted">No related vocabulary listed.</p>
+									{/if}
+								</section>
+							{:else if current.subject.object === 'radical'}
+								<section>
+									<h3>Kanji using this radical</h3>
+									{#if similarKanji.length}
+										<div class="related-items">
+											{#each similarKanji as subject (subject.id)}
+												<span class="related-item">
+													<strong>{subject.data.characters ?? subject.data.slug}</strong>
+													{primaryMeaning(subject)}
+												</span>
+											{/each}
+										</div>
+									{:else}
+										<p class="muted">No kanji listed for this radical.</p>
+									{/if}
+								</section>
+							{:else if current.subject.data.context_sentences?.length}
+								<section>
+									<h3>Example sentences</h3>
+									{#each current.subject.data.context_sentences as sentence, index (`${sentence.japanese}-${index}`)}
+										<div class="context-sentence">
+											<p lang="ja">{sentence.japanese}</p>
+											<p>{sentence.english}</p>
+										</div>
+									{/each}
+								</section>
+							{:else}
+								<p class="muted">No additional information available for this item.</p>
+							{/if}
+						</div>
+					{/if}
 
 					{#if $showMnemonics}
 						<section class="mnemonic">
@@ -397,6 +582,18 @@
 		text-align: center;
 	}
 
+	.radical-card {
+		border-color: rgba(0, 170, 255, 0.72);
+	}
+
+	.kanji-card {
+		border-color: rgba(241, 0, 161, 0.72);
+	}
+
+	.vocabulary-card {
+		border-color: rgba(161, 0, 241, 0.72);
+	}
+
 	.characters {
 		font-size: 4rem;
 		line-height: 1.2;
@@ -414,8 +611,24 @@
 
 	.subject-type {
 		color: var(--muted);
+		font-weight: 700;
 		text-transform: capitalize;
 		margin-top: 0.25rem;
+	}
+
+	.radical-card .subject-type,
+	.radical-card .answer-accent {
+		color: #00aaff;
+	}
+
+	.kanji-card .subject-type,
+	.kanji-card .answer-accent {
+		color: #f100a1;
+	}
+
+	.vocabulary-card .subject-type,
+	.vocabulary-card .answer-accent {
+		color: #a100f1;
 	}
 
 	.card-actions {
@@ -433,6 +646,41 @@
 
 	.flip-button {
 		width: min(100%, 420px);
+	}
+
+	.radical-card .flip-button {
+		background: #00aaff;
+		border-color: #00aaff;
+		color: #fff;
+	}
+
+	.kanji-card .flip-button {
+		background: #f100a1;
+		border-color: #f100a1;
+		color: #fff;
+	}
+
+	.vocabulary-card .flip-button {
+		background: #a100f1;
+		border-color: #a100f1;
+		color: #fff;
+	}
+
+	@media (hover: hover) {
+		.radical-card .flip-button:hover:not(:disabled) {
+			background: transparent;
+			color: #00aaff;
+		}
+
+		.kanji-card .flip-button:hover:not(:disabled) {
+			background: transparent;
+			color: #f100a1;
+		}
+
+		.vocabulary-card .flip-button:hover:not(:disabled) {
+			background: transparent;
+			color: #a100f1;
+		}
 	}
 
 	.back {
@@ -454,6 +702,44 @@
 
 	.back p {
 		margin: 0;
+	}
+
+	.more-info-toggle {
+		align-self: flex-start;
+		font-size: 0.9rem;
+	}
+
+	.more-info {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		border-top: 1px solid var(--border);
+		padding-top: 1rem;
+	}
+
+	.related-items {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.related-item {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 0.4rem;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		padding: 0.35rem 0.55rem;
+	}
+
+	.context-sentence {
+		padding: 0.65rem 0;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.context-sentence p + p {
+		margin-top: 0.3rem;
+		color: var(--muted);
 	}
 
 	.reading-type {
@@ -492,16 +778,16 @@
 	}
 
 	.mnemonic :global(radical) {
-		background: rgba(91, 140, 255, 0.2);
+		background: rgba(255, 255, 255, 0.1);
 	}
 
 	.mnemonic :global(kanji) {
-		background: rgba(255, 176, 60, 0.2);
+		background: rgba(255, 255, 255, 0.16);
 	}
 
 	.mnemonic :global(vocabulary),
 	.mnemonic :global(reading) {
-		background: rgba(63, 191, 106, 0.2);
+		background: rgba(255, 255, 255, 0.08);
 	}
 
 	.grade-buttons {
@@ -529,10 +815,36 @@
 		color: #fff;
 	}
 
+	@media (min-width: 768px) {
+		.card {
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			height: min(540px, calc(100dvh - 260px));
+			min-height: 340px;
+		}
+
+		.back {
+			flex: 1;
+			width: 100%;
+			max-width: 480px;
+			min-height: 0;
+			margin: 1rem auto 0;
+			overflow-y: auto;
+			scrollbar-gutter: stable;
+			overscroll-behavior: contain;
+		}
+	}
+
 	@media (max-width: 520px) {
+		.review-container {
+			padding: 0.75rem 1rem;
+		}
+
 		.review-toolbar {
 			flex-wrap: wrap;
 			gap: 0.5rem;
+			margin-bottom: 0.5rem;
 		}
 
 		.progress-details {
@@ -544,7 +856,17 @@
 		}
 
 		.card {
-			padding: 1.5rem 1rem;
+			margin-top: 0.5rem;
+			padding: 1rem;
+		}
+
+		.characters {
+			font-size: 3.25rem;
+		}
+
+		.card-actions {
+			min-height: 48px;
+			margin-top: 0.75rem;
 		}
 
 		.grade-buttons {
@@ -553,6 +875,10 @@
 
 		.grade-buttons button {
 			padding: 0.6rem 0.5rem;
+		}
+
+		.shortcut {
+			display: none;
 		}
 	}
 </style>

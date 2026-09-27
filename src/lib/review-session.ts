@@ -7,6 +7,7 @@ export interface ReviewSessionSnapshot {
 	version: 1;
 	queue: ReviewCard[];
 	totalUnique: number;
+	knownAssignmentIds?: number[];
 	pendingIds: number[];
 	missedIds: number[];
 	seenAssignments: number[];
