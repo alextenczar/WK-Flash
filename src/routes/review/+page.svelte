@@ -576,18 +576,18 @@
 					{/if}
 				</div>
 			{/if}
-				{#if $showSrsChanges && $latestSrsStageUpdate}
-				<div
-					class="srs-stage-notification"
-					class:decreased={$latestSrsStageUpdate.endingStage < $latestSrsStageUpdate.startingStage}
-					class:unchanged={$latestSrsStageUpdate.endingStage === $latestSrsStageUpdate.startingStage}
-					role="status"
-					aria-live="polite"
-				>
-						{formatSrsStageUpdate($latestSrsStageUpdate)}
-					</div>
-				{/if}
 		</div>
+		{#if $showSrsChanges && $latestSrsStageUpdate}
+			<div
+				class="srs-stage-notification"
+				class:decreased={$latestSrsStageUpdate.endingStage < $latestSrsStageUpdate.startingStage}
+				class:unchanged={$latestSrsStageUpdate.endingStage === $latestSrsStageUpdate.startingStage}
+				role="status"
+				aria-live="polite"
+			>
+				{formatSrsStageUpdate($latestSrsStageUpdate)}
+			</div>
+		{/if}
 	{/if}
 </div>
 

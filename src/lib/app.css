@@ -102,11 +102,9 @@ input:focus {
 }
 
 .srs-stage-notification {
-	position: absolute;
-	z-index: 4;
-	left: 0.65rem;
-	right: 0.65rem;
-	bottom: 0.65rem;
+	width: 100%;
+	max-width: 600px;
+	margin: 0.65rem auto 0;
 	padding: 0.4rem 0.55rem;
 	border: 1px solid var(--good);
 	border-radius: 5px;
@@ -133,11 +131,6 @@ input:focus {
 }
 
 .srs-stage-notification--global {
-	position: fixed;
-	z-index: 20;
-	left: 50%;
-	right: auto;
-	bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
 	width: min(600px, calc(100% - 2rem));
-	transform: translateX(-50%);
+	margin: 0.75rem auto;
 }
