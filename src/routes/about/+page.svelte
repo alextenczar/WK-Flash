@@ -2,15 +2,16 @@
 	<title>About WK Flash</title>
 	<meta
 		name="description"
-		content="WK Flash is an unofficial third-party study app for WaniKani users, independent of WaniKani and Tofugu."
+		content="WK Flash is an unofficial third-party study app for WaniKani users, combining meaning and reading reviews on one card to help cut review time in half."
 	/>
 </svelte:head>
 
 <div class="container about-content">
 	<h1>About WK Flash</h1>
 	<p>
-		WK Flash is an <strong>unofficial, third-party study app for WaniKani users</strong>. It is
-		independently created and is not made, owned, approved, or endorsed by WaniKani or Tofugu.
+		WK Flash is an <strong>unofficial, third-party study app for WaniKani users</strong>. It brings
+		meaning and reading reviews together on one flashcard and should cut your review time in half.
+		Independently developed, WK Flash is not made, owned, approved, or endorsed by WaniKani or Tofugu.
 	</p>
 
 	<section>
