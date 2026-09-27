@@ -4,9 +4,21 @@ import type { ReviewCard, WKAssignment, WKSubject, WKUser } from './types';
 const BASE_URL = 'https://api.wanikani.com/v2';
 const SUBJECT_CACHE_NAME = 'wk-flash-wanikani-subjects-v1';
 const SUBJECT_CACHE_TTL = 24 * 60 * 60 * 1000;
+const JLPT_ASSIGNMENTS_CACHE_TTL = 60 * 1000;
 const MAX_RATE_LIMIT_RETRIES = 2;
 const REVIEW_QUEUE_CACHE_PATH = '/__wk-flash-cache/review-queue';
+const JLPT_PROGRESS_CACHE_PATH = '/__wk-flash-cache/jlpt-progress';
 export const REVIEW_QUEUE_FRESH_MS = 60 * 1000;
+
+interface CachedJLPTProgressData {
+	userId: string;
+	maxAccessibleLevel: number;
+	maxSubjectLevel: number;
+	subjectsFetchedAt: number;
+	assignmentsFetchedAt: number;
+	subjects: WKSubject[];
+	assignments: WKAssignment[];
+}
 
 export interface NextReviewBatch {
 	availableAt: string;
@@ -76,6 +88,66 @@ function reviewQueueCacheRequest(): Request {
 	return new Request(new URL(REVIEW_QUEUE_CACHE_PATH, location.origin));
 }
 
+function jlptProgressCacheRequest(): Request {
+	return new Request(new URL(JLPT_PROGRESS_CACHE_PATH, location.origin));
+}
+
+async function getCachedJLPTProgressData(cache: Cache | null): Promise<CachedJLPTProgressData | null> {
+	if (!cache) return null;
+	try {
+		const response = await cache.match(jlptProgressCacheRequest());
+		if (!response) return null;
+		const snapshot = (await response.json()) as CachedJLPTProgressData;
+		if (
+			typeof snapshot.userId !== 'string' ||
+			!Number.isInteger(snapshot.maxAccessibleLevel) ||
+			!Number.isInteger(snapshot.maxSubjectLevel) ||
+			!Number.isFinite(snapshot.subjectsFetchedAt) ||
+			!Number.isFinite(snapshot.assignmentsFetchedAt) ||
+			!Array.isArray(snapshot.subjects) ||
+			!Array.isArray(snapshot.assignments)
+		) return null;
+		return snapshot;
+	} catch {
+		return null;
+	}
+}
+
+async function cacheJLPTProgressData(
+	cache: Cache | null,
+	snapshot: CachedJLPTProgressData
+): Promise<void> {
+	if (!cache) return;
+	try {
+		await cache.put(
+			jlptProgressCacheRequest(),
+			new Response(JSON.stringify(snapshot), { headers: { 'Content-Type': 'application/json' } })
+		);
+	} catch {
+		// Analytics should still work when the browser cache is unavailable or full.
+	}
+}
+
+async function invalidateCachedJLPTAssignments(): Promise<void> {
+	const cache = await openSubjectCache();
+	if (!cache) return;
+	try {
+		const request = jlptProgressCacheRequest();
+		const response = await cache.match(request);
+		if (!response) return;
+		const snapshot = (await response.json()) as CachedJLPTProgressData;
+		if (!Array.isArray(snapshot.assignments)) return;
+		await cache.put(
+			request,
+			new Response(JSON.stringify({ ...snapshot, assignmentsFetchedAt: 0 }), {
+				headers: { 'Content-Type': 'application/json' }
+			})
+		);
+	} catch {
+		// A cache failure should not interrupt review submission.
+	}
+}
+
 export async function getCachedReviewQueue(): Promise<CachedReviewQueue | null> {
 	const cache = await openSubjectCache();
 	if (!cache) return null;
@@ -139,19 +211,22 @@ export async function removeCachedReviewCard(assignmentId: number): Promise<void
 	try {
 		const request = reviewQueueCacheRequest();
 		const response = await cache.match(request);
-		if (!response) return;
-		const snapshot = (await response.json()) as CachedReviewQueue;
-		if (!Array.isArray(snapshot.cards)) return;
-		await cache.put(
-			request,
-			new Response(
-				JSON.stringify({
-					...snapshot,
-					cards: snapshot.cards.filter((card) => card.assignmentId !== assignmentId)
-				}),
-				{ headers: { 'Content-Type': 'application/json' } }
-			)
-		);
+		if (response) {
+			const snapshot = (await response.json()) as CachedReviewQueue;
+			if (Array.isArray(snapshot.cards)) {
+				await cache.put(
+					request,
+					new Response(
+						JSON.stringify({
+							...snapshot,
+							cards: snapshot.cards.filter((card) => card.assignmentId !== assignmentId)
+						}),
+						{ headers: { 'Content-Type': 'application/json' } }
+					)
+				);
+			}
+		}
+		await invalidateCachedJLPTAssignments();
 	} catch {
 		// A cache failure should not interrupt review submission.
 	}
@@ -234,18 +309,53 @@ export async function getReviewAssignments(
 	return wkFetchAllPages<WKAssignment>(reviewAssignmentsPath(maxAccessibleLevel), apiToken);
 }
 
-export async function getJLPTKanjiProgressData(apiToken: string): Promise<{
-	subjects: WKSubject[];
-	assignments: WKAssignment[];
+export async function getJLPTProgressData(apiToken: string): Promise<{
+	kanji: { subjects: WKSubject[]; assignments: WKAssignment[] };
+	vocabulary: { subjects: WKSubject[]; assignments: WKAssignment[] };
 }> {
 	const user = await getUser(apiToken);
 	const maxAccessibleLevel = Math.min(user.level, user.subscription.max_level_granted);
-	const levels = accessibleLevels(maxAccessibleLevel);
+	const maxSubjectLevel = user.subscription.max_level_granted;
+	const subjectLevels = accessibleLevels(maxSubjectLevel);
+	const assignmentLevels = accessibleLevels(maxAccessibleLevel);
+	const cache = await openSubjectCache();
+	const cached = await getCachedJLPTProgressData(cache);
+	const matchingCache = cached?.userId === user.id && cached.maxSubjectLevel === maxSubjectLevel
+		? cached
+		: null;
+	const subjectsAreFresh = matchingCache !== null && Date.now() - matchingCache.subjectsFetchedAt < SUBJECT_CACHE_TTL;
+	const assignmentsAreFresh = matchingCache !== null && matchingCache.maxAccessibleLevel === maxAccessibleLevel &&
+		Date.now() - matchingCache.assignmentsFetchedAt < JLPT_ASSIGNMENTS_CACHE_TTL;
+	const types = 'kanji,vocabulary,kana_vocabulary';
 	const [subjects, assignments] = await Promise.all([
-		wkFetchAllPages<WKSubject>(`/subjects?types=kanji&levels=${levels}`, apiToken),
-		wkFetchAllPages<WKAssignment>(`/assignments?subject_types=kanji&levels=${levels}`, apiToken)
+		subjectsAreFresh
+			? Promise.resolve(matchingCache.subjects)
+			: wkFetchAllPages<WKSubject>(`/subjects?types=${types}&levels=${subjectLevels}`, apiToken),
+		assignmentsAreFresh
+			? Promise.resolve(matchingCache.assignments)
+			: wkFetchAllPages<WKAssignment>(`/assignments?subject_types=${types}&levels=${assignmentLevels}`, apiToken)
 	]);
-	return { subjects, assignments };
+	await cacheJLPTProgressData(cache, {
+		userId: user.id,
+		maxAccessibleLevel,
+		maxSubjectLevel,
+		subjectsFetchedAt: subjectsAreFresh ? matchingCache.subjectsFetchedAt : Date.now(),
+		assignmentsFetchedAt: assignmentsAreFresh ? matchingCache.assignmentsFetchedAt : Date.now(),
+		subjects,
+		assignments
+	});
+	return {
+		kanji: {
+			subjects: subjects.filter((subject) => subject.object === 'kanji'),
+			assignments: assignments.filter((assignment) => assignment.data.subject_type === 'kanji')
+		},
+		vocabulary: {
+			subjects: subjects.filter((subject) => subject.object === 'vocabulary' || subject.object === 'kana_vocabulary'),
+			assignments: assignments.filter(
+				(assignment) => assignment.data.subject_type === 'vocabulary' || assignment.data.subject_type === 'kana_vocabulary'
+			)
+		}
+	};
 }
 
 export async function getSubjectsByIds(
@@ -438,6 +548,7 @@ export async function submitReview(
 		data?: { starting_srs_stage?: number; ending_srs_stage?: number };
 		resources_updated?: { assignment?: { data?: { srs_stage?: number } } };
 	} | null;
+	await invalidateCachedJLPTAssignments();
 	return {
 		startingSrsStage: response?.data?.starting_srs_stage ?? null,
 		endingSrsStage:

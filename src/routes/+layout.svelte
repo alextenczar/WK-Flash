@@ -45,7 +45,9 @@
 	<nav class="container">
 		<a href="/" class="brand">WK Flash</a>
 		<div class="links">
-			<a href="/analytics">Analytics</a>
+			{#if $apiKey}
+				<a href="/analytics">Analytics</a>
+			{/if}
 			<a href="/settings">Settings</a>
 			<a href="/about">About</a>
 		</div>

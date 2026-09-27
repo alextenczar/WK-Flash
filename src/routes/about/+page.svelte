@@ -14,6 +14,37 @@
 		Independently developed, WK Flash is not made, owned, approved, or endorsed by WaniKani or Tofugu.
 	</p>
 
+	<section class="features" aria-labelledby="features-heading">
+		<h2 id="features-heading">What WK Flash adds</h2>
+		<p>Alongside your WaniKani account, WK Flash adds tools for reviewing, tracking, and customizing your study flow.</p>
+		<ul class="feature-list">
+			<li>
+				<h3>Combined meaning and reading reviews</h3>
+				<p>Answer both parts on one card, then send one combined review result to WaniKani.</p>
+			</li>
+			<li>
+				<h3>Offline review continuity</h3>
+				<p>Resume an in-progress session offline and queue completed answers for automatic sync when your connection returns.</p>
+			</li>
+			<li>
+				<h3>JLPT progress analytics</h3>
+				<p>Track kanji and vocabulary by JLPT level, see learned status and WaniKani availability, and search level-specific or cross-level results.</p>
+			</li>
+			<li>
+				<h3>Related item details</h3>
+				<p>Look up visually similar kanji, kanji components, and vocabulary grouped by reading while reviewing.</p>
+			</li>
+			<li>
+				<h3>Personal review controls</h3>
+				<p>Customize review keybindings, show or hide mnemonics and parts of speech, and adjust pronunciation playback and volume.</p>
+			</li>
+			<li>
+				<h3>SRS feedback and review planning</h3>
+				<p>See SRS stage changes after answers, review counts due, and the next scheduled review batch.</p>
+			</li>
+		</ul>
+	</section>
+
 	<section>
 		<h2>Using WK Flash</h2>
 		<p>
@@ -58,6 +89,31 @@
 <style>
 	section {
 		margin-top: 2rem;
+	}
+
+	.features > p {
+		color: var(--muted);
+	}
+
+	.feature-list {
+		margin: 1rem 0 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.feature-list li {
+		padding: 0.85rem 0;
+		border-top: 1px solid var(--border);
+	}
+
+	.feature-list h3 {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.feature-list p {
+		margin: 0.3rem 0 0;
+		color: var(--muted);
 	}
 
 	h2 {

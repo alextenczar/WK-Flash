@@ -1,3 +1,7 @@
+# JLPT Vocabulary Dataset
+
+The vocabulary entries in `jlpt-vocabulary.json` are derived from [elzup/jlpt-word-list](https://github.com/elzup/jlpt-word-list), specifically `out/all.csv`. The retained fields are expression, reading, meaning, and JLPT level tags. The source project is distributed under the MIT License.
+
 # JLPT Kanji Dataset
 
 The character-to-level mapping in `jlpt-kanji.json` is derived from [AnchorI/jlpt-kanji-dictionary](https://github.com/AnchorI/jlpt-kanji-dictionary), specifically `jlpt-kanji.json`. Only the `kanji` and `jlpt` fields are retained.

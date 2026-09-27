@@ -1,25 +1,57 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import jlptKanji from '$lib/data/jlpt-kanji.json';
+	import jlptVocabulary from '$lib/data/jlpt-vocabulary.json';
 	import { apiKey } from '$lib/storage';
-	import { getJLPTKanjiProgressData, WaniKaniError } from '$lib/wanikani/api';
+	import { getJLPTProgressData, WaniKaniError } from '$lib/wanikani/api';
 	import type { WKAssignment, WKSubject } from '$lib/wanikani/types';
 
 	type JLPTLevel = keyof typeof jlptKanji;
 	type JLPTProgressData = { subjects: WKSubject[]; assignments: WKAssignment[] };
+	type VocabularyEntry = { expression: string; reading: string; meaning: string; levels: JLPTLevel[] };
+	type VocabularyRow = {
+		entry: VocabularyEntry;
+		status: 'Learned' | 'In progress' | 'Not started' | 'Not available';
+		statusClass: 'learned' | 'in-progress' | 'not-started' | 'unavailable';
+		srsStage: number | null;
+		subjectLevel: number | null;
+	};
 	type KanjiRow = {
 		character: string;
 		meaning: string;
+		subjectLevel: number | null;
 		status: 'Learned' | 'In progress' | 'Not started' | 'Not available';
 		statusClass: 'learned' | 'in-progress' | 'not-started' | 'unavailable';
 		srsStage: number | null;
 	};
 
+	function vocabularyMatchKeys(entry: VocabularyEntry): string[] {
+		const expressions = entry.expression.split('、').map((value) => value.normalize('NFKC'));
+		const readings = entry.reading.split('、').map((value) => value.normalize('NFKC'));
+		if (expressions.length > 1 && expressions.length === readings.length) {
+			return expressions.map((expression, index) => `${expression}\t${readings[index]}`);
+		}
+		return expressions.flatMap((expression) => readings.map((reading) => `${expression}\t${reading}`));
+	}
+
+	function matchingVocabularySubjects(
+		entry: VocabularyEntry,
+		subjectsByKey: Map<string, WKSubject[]>
+	): WKSubject[] {
+		const subjects = new Map<number, WKSubject>();
+		for (const key of vocabularyMatchKeys(entry)) {
+			for (const subject of subjectsByKey.get(key) ?? []) subjects.set(subject.id, subject);
+		}
+		return [...subjects.values()];
+	}
+
 	const levels: JLPTLevel[] = ['N5', 'N4', 'N3', 'N2', 'N1'];
 	let selectedLevel = $state<JLPTLevel>('N5');
+	let selectedVocabularyLevel = $state<JLPTLevel>('N5');
 	let search = $state('');
-	let expanded = $state(false);
+	let vocabularySearch = $state('');
 	let progress = $state<JLPTProgressData | null>(null);
+	let vocabularyProgress = $state<JLPTProgressData | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 
@@ -40,16 +72,48 @@
 		}
 		return assignments;
 	});
-
+	const vocabularyEntries = jlptVocabulary.entries as VocabularyEntry[];
+	const subjectsByHeadwordReading = $derived.by(() => {
+		const subjects = new Map<string, WKSubject[]>();
+		for (const subject of vocabularyProgress?.subjects ?? []) {
+			if (subject.object !== 'vocabulary' && subject.object !== 'kana_vocabulary') continue;
+			const expression = subject.data.characters?.normalize('NFKC');
+			if (!expression) continue;
+			for (const reading of new Set((subject.data.readings ?? []).map((item) => item.reading.normalize('NFKC')))) {
+				const key = `${expression}\t${reading}`;
+				const matches = subjects.get(key) ?? [];
+				matches.push(subject);
+				subjects.set(key, matches);
+			}
+		}
+		return subjects;
+	});
+	const vocabularyAssignmentsBySubjectId = $derived.by(() =>
+		new Map((vocabularyProgress?.assignments ?? []).map((assignment) => [assignment.data.subject_id, assignment]))
+	);
 	const levelCounts = $derived.by(() =>
 		levels.map((level) => {
 			const characters = Array.from(jlptKanji[level]);
+			const unavailable = characters.filter((character) => !subjectsByCharacter.has(character)).length;
 			const learned = characters.filter((character) => {
 				const subject = subjectsByCharacter.get(character);
 				const assignment = subject ? assignmentsBySubjectId.get(subject.id) : undefined;
 				return assignment && assignment.data.srs_stage >= 5;
 			}).length;
-			return { level, learned, total: characters.length };
+			return { level, learned, total: characters.length, unavailable };
+		})
+	);
+	const vocabularyLevelCounts = $derived.by(() =>
+		levels.map((level) => {
+			const entries = vocabularyEntries.filter((entry) => entry.levels.includes(level));
+			let unavailable = 0;
+			let learned = 0;
+			for (const entry of entries) {
+				const matches = matchingVocabularySubjects(entry, subjectsByHeadwordReading);
+				if (matches.length === 0) unavailable++;
+				else if (matches.some((subject) => (vocabularyAssignmentsBySubjectId.get(subject.id)?.data.srs_stage ?? 0) >= 5)) learned++;
+			}
+			return { level, learned, total: entries.length, unavailable };
 		})
 	);
 
@@ -60,15 +124,15 @@
 			const meaning = subject?.data.meanings.find((item) => item.primary)?.meaning ?? '';
 
 			if (!subject) {
-				return { character, meaning: '', status: 'Not available', statusClass: 'unavailable', srsStage: null };
+				return { character, meaning: '', subjectLevel: null, status: 'Not available', statusClass: 'unavailable', srsStage: null };
 			}
 			if (!assignment) {
-				return { character, meaning, status: 'Not started', statusClass: 'not-started', srsStage: null };
+				return { character, meaning, subjectLevel: subject.data.level, status: 'Not started', statusClass: 'not-started', srsStage: null };
 			}
 			if (assignment.data.srs_stage >= 5) {
-				return { character, meaning, status: 'Learned', statusClass: 'learned', srsStage: assignment.data.srs_stage };
+				return { character, meaning, subjectLevel: subject.data.level, status: 'Learned', statusClass: 'learned', srsStage: assignment.data.srs_stage };
 			}
-			return { character, meaning, status: 'In progress', statusClass: 'in-progress', srsStage: assignment.data.srs_stage };
+			return { character, meaning, subjectLevel: subject.data.level, status: 'In progress', statusClass: 'in-progress', srsStage: assignment.data.srs_stage };
 		})
 	);
 
@@ -78,12 +142,56 @@
 			? kanjiRows.filter((row) => row.character.includes(normalizedSearch))
 			: kanjiRows;
 	});
-	const displayedKanji = $derived(expanded ? visibleKanji : visibleKanji.slice(0, 10));
+	const displayedKanji = $derived(visibleKanji.slice(0, 5));
+	const vocabularyRows = $derived.by((): VocabularyRow[] =>
+		vocabularyEntries.filter((entry) => entry.levels.includes(selectedVocabularyLevel)).map((entry) => {
+			const matches = matchingVocabularySubjects(entry, subjectsByHeadwordReading);
+			const assignments = matches
+				.map((subject) => vocabularyAssignmentsBySubjectId.get(subject.id))
+				.filter((assignment): assignment is WKAssignment => assignment !== undefined)
+				.sort((first, second) => second.data.srs_stage - first.data.srs_stage);
+			const assignment = assignments[0];
+			const subject = assignment
+				? matches.find((item) => item.id === assignment.data.subject_id)
+				: matches[0];
+			const stage = assignment?.data.srs_stage ?? null;
+			const learned = stage !== null && stage >= 5;
+			const inProgress = stage !== null && stage > 0 && !learned;
+			return {
+				entry,
+				status: learned ? 'Learned' : inProgress ? 'In progress' : subject ? 'Not started' : 'Not available',
+				statusClass: learned ? 'learned' : inProgress ? 'in-progress' : subject ? 'not-started' : 'unavailable',
+				srsStage: stage,
+				subjectLevel: subject?.data.level ?? null
+			};
+		})
+	);
+	const visibleVocabulary = $derived.by(() => {
+		const normalizedSearch = vocabularySearch.trim().normalize('NFKC').toLocaleLowerCase();
+		return normalizedSearch
+			? vocabularyRows.filter(({ entry }) =>
+				[entry.expression, entry.reading, entry.meaning].some((value) =>
+					value.normalize('NFKC').toLocaleLowerCase().includes(normalizedSearch)
+				)
+			)
+			: vocabularyRows;
+	});
+	const displayedVocabulary = $derived(visibleVocabulary.slice(0, 5));
+
+	function resultsHref(type: 'kanji' | 'vocabulary', level: JLPTLevel, query: string): string {
+		const params = new URLSearchParams({ type, level });
+		if (query.trim()) {
+			params.set('q', query);
+			params.set('scope', 'all');
+		}
+		return `/analytics/results?${params}`;
+	}
 
 	async function refreshProgress() {
 		if (!$apiKey) {
 			progress = null;
-			error = 'Connect a WaniKani API key to see your kanji progress.';
+			vocabularyProgress = null;
+			error = 'Connect a WaniKani API key to see your JLPT progress.';
 			loading = false;
 			return;
 		}
@@ -91,9 +199,11 @@
 		loading = true;
 		error = '';
 		try {
-			progress = await getJLPTKanjiProgressData($apiKey);
+			const data = await getJLPTProgressData($apiKey);
+			progress = data.kanji;
+			vocabularyProgress = data.vocabulary;
 		} catch (cause) {
-			error = cause instanceof WaniKaniError ? cause.message : 'Could not load JLPT kanji progress.';
+			error = cause instanceof WaniKaniError ? cause.message : 'Could not load JLPT progress.';
 		} finally {
 			loading = false;
 		}
@@ -106,7 +216,7 @@
 
 <svelte:head>
 	<title>Analytics | WK Flash</title>
-	<meta name="description" content="Track your WaniKani kanji progress across JLPT levels." />
+	<meta name="description" content="Track your WaniKani kanji and vocabulary progress across JLPT levels." />
 </svelte:head>
 
 <div class="container analytics-page">
@@ -129,10 +239,10 @@
 	<section class="jlpt-section" aria-labelledby="jlpt-heading">
 		<h2 id="jlpt-heading">JLPT Kanji</h2>
 		<p class="method-note">
-			Guru (SRS 5) or higher counts as learned. Characters without an accessible WaniKani subject are marked Not available.
+			Guru (SRS 5) or higher counts as learned. The yellow marker shows the share of JLPT items available on WaniKani.
 		</p>
 
-		<section class="level-tabs" role="tablist" aria-label="JLPT levels" aria-busy={loading}>
+		<div class="level-tabs" role="tablist" aria-label="JLPT levels" aria-busy={loading}>
 			{#each levelCounts as count (count.level)}
 				<button
 					type="button"
@@ -141,26 +251,32 @@
 					aria-controls="kanji-panel"
 					aria-selected={selectedLevel === count.level}
 					class:active={selectedLevel === count.level}
-					onclick={() => { selectedLevel = count.level; search = ''; expanded = false; }}
+					onclick={() => { selectedLevel = count.level; search = ''; }}
 				>
 					<span class="level-name">{count.level}</span>
 					<span class="level-count">
 						{loading ? '...' : progress ? `${count.learned} / ${count.total}` : `— / ${count.total}`}
 					</span>
 					<span class="progress-track" aria-hidden="true">
-						<span style={`width: ${count.total ? (count.learned / count.total) * 100 : 0}%`}></span>
+						<span class="progress-fill" style={`width: ${count.total ? (count.learned / count.total) * 100 : 0}%`}></span>
+						{#if progress && count.total > count.unavailable}
+							<span
+								class="progress-marker"
+								style={`left: ${((count.total - count.unavailable) / count.total) * 100}%`}
+							></span>
+						{/if}
 					</span>
 				</button>
 			{/each}
-		</section>
+		</div>
 
-		<section id="kanji-panel" class="kanji-panel" role="tabpanel" aria-labelledby={`tab-${selectedLevel}`}>
+		<div id="kanji-panel" class="kanji-panel" role="tabpanel" aria-labelledby={`tab-${selectedLevel}`}>
 			<div class="list-heading">
 				<div>
 					<h2>{selectedLevel}</h2>
 					<p>
 						{#if progress}
-							{levelCounts.find((count) => count.level === selectedLevel)?.learned ?? 0} of {Array.from(jlptKanji[selectedLevel]).length} learned
+							{levelCounts.find((count) => count.level === selectedLevel)?.learned ?? 0} of {Array.from(jlptKanji[selectedLevel]).length} learned · {levelCounts.find((count) => count.level === selectedLevel)?.unavailable ?? 0} unavailable in WaniKani
 						{:else}
 							{Array.from(jlptKanji[selectedLevel]).length} kanji
 						{/if}
@@ -177,33 +293,117 @@
 			{:else if progress}
 				{#if visibleKanji.length}
 					<ul class="kanji-list">
+						<li class="column-headings kanji-columns" aria-hidden="true">
+							<span>Item</span><span>Meaning</span><span>WK level</span><span>Status</span><span>SRS</span>
+						</li>
 						{#each displayedKanji as row (row.character)}
 							<li>
 								<span class="character" lang="ja">{row.character}</span>
 								<span class="meaning">{row.meaning || ' '}</span>
+								<span class="wk-level">{row.subjectLevel === null ? '—' : `L${row.subjectLevel}`}</span>
 								<span class={`status status--${row.statusClass}`}>{row.status}</span>
 								<span class="stage">{row.srsStage === null ? '' : `SRS ${row.srsStage}`}</span>
 							</li>
 						{/each}
 					</ul>
-					{#if visibleKanji.length > 10}
-						<button
-							type="button"
-							class="expand-button"
-							aria-expanded={expanded}
-							onclick={() => { expanded = !expanded; }}
-						>
-							{expanded ? 'Show less' : `Show ${visibleKanji.length - 10} more`}
-						</button>
-					{/if}
 				{:else}
 					<p class="empty-state">No kanji match “{search}”.</p>
+				{/if}
+				{#if visibleKanji.length > 5 || search.trim()}
+					<a class="expand-button results-link" href={resultsHref('kanji', selectedLevel, search)}>
+						{search.trim() ? 'Search all levels' : `View all ${selectedLevel} results`}
+					</a>
 				{/if}
 			{:else}
 				<p class="empty-state">Connect WaniKani to view progress.</p>
 			{/if}
-		</section>
+		</div>
 	</section>
+
+	<section class="jlpt-section" aria-labelledby="jlpt-vocabulary-heading">
+		<h2 id="jlpt-vocabulary-heading">JLPT Vocabulary</h2>
+		<p class="method-note">
+			Guru (SRS 5) or higher counts as learned. The yellow marker shows the share of JLPT items available on WaniKani.
+		</p>
+
+		<div class="level-tabs" role="tablist" aria-label="JLPT vocabulary levels" aria-busy={loading}>
+			{#each vocabularyLevelCounts as count (count.level)}
+				<button
+					type="button"
+					role="tab"
+					id={`vocabulary-tab-${count.level}`}
+					aria-controls="vocabulary-panel"
+					aria-selected={selectedVocabularyLevel === count.level}
+					class:active={selectedVocabularyLevel === count.level}
+					onclick={() => { selectedVocabularyLevel = count.level; vocabularySearch = ''; }}
+				>
+					<span class="level-name">{count.level}</span>
+					<span class="level-count">
+						{loading ? '...' : vocabularyProgress ? `${count.learned} / ${count.total}` : `— / ${count.total}`}
+					</span>
+					<span class="progress-track" aria-hidden="true">
+						<span class="progress-fill" style={`width: ${count.total ? (count.learned / count.total) * 100 : 0}%`}></span>
+						{#if vocabularyProgress && count.total > count.unavailable}
+							<span
+								class="progress-marker"
+								style={`left: ${((count.total - count.unavailable) / count.total) * 100}%`}
+							></span>
+						{/if}
+					</span>
+				</button>
+			{/each}
+		</div>
+
+		<div id="vocabulary-panel" class="kanji-panel" role="tabpanel" aria-labelledby={`vocabulary-tab-${selectedVocabularyLevel}`}>
+			<div class="list-heading">
+				<div>
+					<h2>{selectedVocabularyLevel}</h2>
+					<p>
+						{#if vocabularyProgress}
+							{vocabularyLevelCounts.find((count) => count.level === selectedVocabularyLevel)?.learned ?? 0} of {vocabularyLevelCounts.find((count) => count.level === selectedVocabularyLevel)?.total ?? 0} learned · {vocabularyLevelCounts.find((count) => count.level === selectedVocabularyLevel)?.unavailable ?? 0} unavailable in WaniKani
+						{:else}
+							{vocabularyLevelCounts.find((count) => count.level === selectedVocabularyLevel)?.total ?? 0} vocabulary items
+						{/if}
+					</p>
+				</div>
+				<label class="search-label">
+					<span class="visually-hidden">Search {selectedVocabularyLevel} vocabulary</span>
+					<input type="search" placeholder="Find vocabulary" bind:value={vocabularySearch} disabled={!vocabularyProgress} />
+				</label>
+			</div>
+
+			{#if loading}
+				<p class="empty-state" role="status">Loading vocabulary progress...</p>
+			{:else if vocabularyProgress}
+				{#if visibleVocabulary.length}
+					<ul class="kanji-list">
+						<li class="column-headings vocabulary-columns" aria-hidden="true">
+							<span>Item</span><span>Meaning</span><span>WK level</span><span>Status</span><span>SRS</span>
+						</li>
+						{#each displayedVocabulary as row (`${row.entry.expression}-${row.entry.reading}`)}
+							<li>
+								<span class="vocabulary-expression" lang="ja">{row.entry.expression}<small>{row.entry.reading}</small></span>
+								<span class="meaning">{row.entry.meaning}</span>
+								<span class="wk-level">{row.subjectLevel === null ? '—' : `L${row.subjectLevel}`}</span>
+								<span class={`status status--${row.statusClass}`}>{row.status}</span>
+								<span class="stage">{row.srsStage === null ? '' : `SRS ${row.srsStage}`}</span>
+							</li>
+						{/each}
+					</ul>
+				{:else}
+					<p class="empty-state">No vocabulary matches “{vocabularySearch}”.</p>
+				{/if}
+				{#if visibleVocabulary.length > 5 || vocabularySearch.trim()}
+					<a class="expand-button results-link" href={resultsHref('vocabulary', selectedVocabularyLevel, vocabularySearch)}>
+						{vocabularySearch.trim() ? 'Search all levels' : `View all ${selectedVocabularyLevel} results`}
+					</a>
+				{/if}
+			{:else}
+				<p class="empty-state">Connect WaniKani to view progress.</p>
+			{/if}
+		</div>
+	</section>
+
 </div>
 
 <style>
@@ -284,20 +484,31 @@
 		white-space: nowrap;
 	}
 
-	.progress-track,
-	.progress-track span {
+	.progress-track {
 		display: block;
+		position: relative;
 		height: 4px;
 		border-radius: 2px;
-	}
-
-	.progress-track {
-		overflow: hidden;
 		background: var(--border);
 	}
 
-	.progress-track span {
+	.progress-fill {
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 4px;
+		border-radius: 2px;
 		background: var(--good);
+	}
+
+	.progress-marker {
+		position: absolute;
+		top: -3px;
+		width: 2px;
+		height: 10px;
+		border-radius: 1px;
+		background: #facc15;
+		transform: translateX(-50%);
 	}
 
 	.kanji-panel {
@@ -340,13 +551,40 @@
 		margin-top: 1rem;
 	}
 
+	.results-link {
+		display: inline-block;
+	}
+
 	.kanji-list li {
 		display: grid;
-		grid-template-columns: 3.5rem minmax(0, 1fr) minmax(7.5rem, auto) 3.5rem;
+		grid-template-columns: 3.5rem minmax(0, 1fr) 4rem minmax(7.5rem, auto) 3.5rem;
 		align-items: center;
 		gap: 0.75rem;
 		min-height: 56px;
 		border-top: 1px solid var(--border);
+	}
+
+	.kanji-list li.vocabulary-columns {
+		grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr) 4rem minmax(7.5rem, auto) 3.5rem;
+	}
+
+	.kanji-list li.column-headings {
+		min-height: 36px;
+		color: var(--muted);
+		font-size: 0.75rem;
+		font-weight: 600;
+	}
+
+	.vocabulary-expression {
+		display: grid;
+		gap: 0.15rem;
+		font-size: 1.2rem;
+		line-height: 1.2;
+	}
+
+	.vocabulary-expression small {
+		color: var(--muted);
+		font-size: 0.72rem;
 	}
 
 	.character {
@@ -357,6 +595,12 @@
 	.meaning {
 		color: var(--muted);
 		font-size: 0.9rem;
+	}
+
+	.wk-level {
+		color: var(--muted);
+		font-size: 0.8rem;
+		white-space: nowrap;
 	}
 
 	.status {
@@ -417,8 +661,20 @@
 		}
 
 		.kanji-list li {
-			grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+			grid-template-columns: 2.75rem minmax(0, 1fr) 3.5rem auto;
 			gap: 0.5rem;
+		}
+
+		.kanji-list li.vocabulary-columns {
+			grid-template-columns: minmax(4.5rem, 6rem) minmax(0, 1fr) 3.5rem auto;
+		}
+
+		.vocabulary-expression {
+			font-size: 1rem;
+		}
+
+		.column-headings span:last-child {
+			display: none;
 		}
 
 		.stage {
