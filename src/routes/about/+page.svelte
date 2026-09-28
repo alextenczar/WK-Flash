@@ -65,6 +65,21 @@
 	</section>
 
 	<section>
+		<h2>Install on your phone</h2>
+		<p>Add WK Flash to your home screen to open it in an app-like window.</p>
+		<ul>
+			<li>
+				<strong>iPhone:</strong> Open WK Flash in Safari, tap the Share button, choose “Add to Home
+				Screen,” then tap “Add.”
+			</li>
+			<li>
+				<strong>Android:</strong> Open WK Flash in Chrome, tap the menu button, choose “Install app”
+				(or “Add to Home screen”), then confirm.
+			</li>
+		</ul>
+	</section>
+
+	<section>
 		<h2>Independent project</h2>
 		<p>
 			WaniKani and its content, names, and artwork belong to their respective owners. WK Flash has
