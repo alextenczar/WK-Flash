@@ -557,18 +557,50 @@ export async function getReviewOverview(apiToken: string): Promise<{
 	reviewCount: number;
 	cards: ReviewCard[];
 	nextReviewBatch: NextReviewBatch | null | undefined;
+	currentLevelKanji: {
+		character: string;
+		srsStage: number | null;
+		availableAt: string | null;
+		passedAt: string | null;
+	}[] | null;
 }> {
 	const [reviewData, nextBatch] = await Promise.all([
 		getAccessibleReviewData(apiToken),
 		getNextReviewBatch(apiToken)
 	]);
 	const { user, assignments, reviewCount, subjectById, maxAccessibleLevel } = reviewData;
+	let currentLevelKanji: {
+		character: string;
+		srsStage: number | null;
+		availableAt: string | null;
+		passedAt: string | null;
+	}[] | null = null;
+	try {
+		const [subjects, levelAssignments] = await Promise.all([
+			wkFetchAllPages<WKSubject>(`/subjects?types=kanji&levels=${user.level}`, apiToken),
+			wkFetchAllPages<WKAssignment>(`/assignments?subject_types=kanji&levels=${user.level}`, apiToken)
+		]);
+		const assignmentsBySubjectId = new Map(
+			levelAssignments.map((assignment) => [assignment.data.subject_id, assignment])
+		);
+		currentLevelKanji = subjects
+			.filter((subject) => subject.object === 'kanji' && subject.data.characters)
+			.sort((first, second) => first.id - second.id)
+			.map((subject) => ({
+				character: subject.data.characters!,
+				srsStage: assignmentsBySubjectId.get(subject.id)?.data.srs_stage ?? null,
+				availableAt: assignmentsBySubjectId.get(subject.id)?.data.available_at ?? null,
+				passedAt: assignmentsBySubjectId.get(subject.id)?.data.passed_at ?? null
+			}));
+	} catch {
+		// The home page can still show review information if this optional summary fails.
+	}
 	const nextReviewBatch = nextBatch === undefined
 		? (await getCachedReviewQueue())?.nextReviewBatch
 		: nextBatch;
 	const cards = reviewCardsFromData(assignments, subjectById, maxAccessibleLevel, user.level);
 	await cacheReviewQueue(cards, user, reviewCount, nextReviewBatch);
-	return { user, reviewCount, cards, nextReviewBatch };
+	return { user, reviewCount, cards, nextReviewBatch, currentLevelKanji };
 }
 
 async function getNextReviewBatch(apiToken: string): Promise<NextReviewBatch | null | undefined> {

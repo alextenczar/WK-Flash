@@ -20,6 +20,13 @@
 	let user = $state<WKUser | null>(null);
 	let reviewCount = $state<number | null>(null);
 	let nextReviewBatch = $state<NextReviewBatch | null | undefined>(undefined);
+	let currentLevelKanji = $state<{
+		character: string;
+		srsStage: number | null;
+		availableAt: string | null;
+		passedAt: string | null;
+	}[] | null>(null);
+	let selectedKanjiCharacter = $state<string | null>(null);
 	let now = $state(Date.now());
 	let hasSavedReview = $state(false);
 	let hasCachedReviewQueue = $state(false);
@@ -59,6 +66,7 @@
 			if (
 				!forceRefresh &&
 				cachedQueue &&
+				currentLevelKanji !== null &&
 				typeof cachedQueue.reviewCount === 'number' &&
 				cachedQueue.nextReviewBatch !== undefined &&
 				(!cachedQueue.nextReviewBatch || Date.parse(cachedQueue.nextReviewBatch.availableAt) > Date.now()) &&
@@ -69,6 +77,7 @@
 			}
 			const overview = await getReviewOverview($apiKey);
 			user = overview.user;
+			currentLevelKanji = overview.currentLevelKanji;
 			showCachedQueue(overview.cards, overview.user, overview.reviewCount, overview.nextReviewBatch);
 		} catch (e) {
 			if (cachedQueue) {
@@ -155,26 +164,19 @@
 		const remainingSeconds = seconds % 60;
 		return [hours, minutes, remainingSeconds].map((value) => String(value).padStart(2, '0')).join(':');
 	}
+
+	function kanjiDueLabel(item: { srsStage: number | null; availableAt: string | null }): string {
+		if (item.srsStage === null) return 'Not started';
+		if (item.srsStage >= 9) return 'Burned; no further reviews';
+		if (!item.availableAt) return 'No review scheduled';
+		const dueAt = Date.parse(item.availableAt);
+		if (!Number.isFinite(dueAt)) return 'Due date unavailable';
+		if (dueAt <= now) return 'Due now';
+		return `Due ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(dueAt)}`;
+	}
 </script>
 
 <div class="container">
-	{#if nextReviewBatch !== undefined}
-		<section class="next-review-batch" aria-label="Upcoming reviews">
-			{#if nextReviewBatch}
-				{#if Date.parse(nextReviewBatch.availableAt) > now}
-					<p>
-						<strong>{nextReviewBatch.count}</strong> review{nextReviewBatch.count === 1 ? '' : 's'} coming in
-						<time datetime={nextReviewBatch.availableAt}>{formatCountdown(nextReviewBatch.availableAt)}</time>
-					</p>
-				{:else}
-					<p><strong>{nextReviewBatch.count}</strong> upcoming review{nextReviewBatch.count === 1 ? '' : 's'} available now.</p>
-				{/if}
-			{:else}
-				<p>No more reviews are queued in the next 24 hours.</p>
-			{/if}
-		</section>
-	{/if}
-
 	{#if loading}
 		<p>
 			{reviewCount === null
@@ -202,7 +204,23 @@
 		<button type="button" onclick={() => void load(true)}>Refresh</button>
 	{:else}
 		<h1>{greeting}, {user?.username}!</h1>
-		<p>You have <strong>{reviewCount}</strong> review{reviewCount === 1 ? '' : 's'} due.</p>
+		<p>
+			You have <strong>{reviewCount}</strong> review{reviewCount === 1 ? '' : 's'} due.
+			{#if nextReviewBatch !== undefined}
+				<span class="next-review-batch">
+					{#if nextReviewBatch}
+						{#if Date.parse(nextReviewBatch.availableAt) > now}
+							<strong>{nextReviewBatch.count}</strong> review{nextReviewBatch.count === 1 ? '' : 's'} coming in
+							<time datetime={nextReviewBatch.availableAt}>{formatCountdown(nextReviewBatch.availableAt)}</time>.
+						{:else}
+							<strong>{nextReviewBatch.count}</strong> upcoming review{nextReviewBatch.count === 1 ? '' : 's'} available now.
+						{/if}
+					{:else}
+						No more reviews are queued in the next 24 hours.
+					{/if}
+				</span>
+			{/if}
+		</p>
 
 		{#if reviewCount === 0}
 			<p>No reviews are available right now. Check back later.</p>
@@ -217,23 +235,167 @@
 			</p>
 			<a href="/review"><button class="primary">Start Review</button></a>
 		{/if}
+
+		{#if currentLevelKanji?.length}
+			<section class="level-kanji" aria-labelledby="level-kanji-heading">
+				<div class="level-kanji-heading">
+					<h2 id="level-kanji-heading">Level {user?.level} kanji</h2>
+					<p><strong>{currentLevelKanji.filter((item) => item.passedAt !== null).length}</strong> / {currentLevelKanji.length} Guru'd</p>
+				</div>
+				<div class="kanji-grid">
+					{#each currentLevelKanji as item (item.character)}
+						<button
+							type="button"
+							class="kanji-item"
+							data-tooltip={kanjiDueLabel(item)}
+							aria-label="{item.character}: {kanjiDueLabel(item)}"
+							aria-expanded={selectedKanjiCharacter === item.character}
+							onclick={() => selectedKanjiCharacter = selectedKanjiCharacter === item.character ? null : item.character}
+						>
+							<span class="kanji-character">{item.character}</span>
+							<span class="stage-track" aria-hidden="true">
+								{#each Array(5) as _, index}
+									<span class:filled={index < (item.passedAt !== null ? 5 : Math.min(item.srsStage ?? 0, 4))}></span>
+								{/each}
+							</span>
+							{#if selectedKanjiCharacter === item.character}
+								<span class="kanji-due" role="status">{kanjiDueLabel(item)}</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			</section>
+		{/if}
 	{/if}
 </div>
 
 <style>
 	.next-review-batch {
-		margin-bottom: 1.5rem;
-		padding: 0.25rem 0 0.25rem 0.75rem;
-		border-left: 3px solid var(--accent);
-	}
-
-	.next-review-batch p {
-		margin: 0;
+		margin-left: 0.35rem;
+		color: var(--muted);
 	}
 
 	.next-review-batch time {
 		font-variant-numeric: tabular-nums;
 		font-weight: 700;
+	}
+
+	.level-kanji {
+		margin-top: 2rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--border);
+	}
+
+	.level-kanji-heading {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 0.75rem;
+	}
+
+	.level-kanji-heading h2,
+	.level-kanji-heading p {
+		margin: 0;
+	}
+
+	.level-kanji-heading h2 {
+		font-size: 1rem;
+	}
+
+	.level-kanji-heading p {
+		color: var(--muted);
+		font-size: 0.9rem;
+	}
+
+	.kanji-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(2.75rem, 1fr));
+		gap: 0.65rem 0.75rem;
+		max-width: 44rem;
+	}
+
+	.kanji-item {
+		position: relative;
+		display: grid;
+		justify-items: center;
+		gap: 0.4rem;
+		min-width: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		cursor: pointer;
+	}
+
+	.kanji-item:hover .kanji-character,
+	.kanji-item:focus-visible .kanji-character {
+		border-color: var(--accent);
+	}
+
+	.kanji-item:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 3px;
+	}
+
+	.kanji-item:not([aria-expanded='true']):hover::after,
+	.kanji-item:not([aria-expanded='true']):focus-visible::after,
+	.kanji-due {
+		position: absolute;
+		z-index: 2;
+		left: 50%;
+		bottom: calc(100% + 0.35rem);
+		width: max-content;
+		max-width: min(12rem, 75vw);
+		padding: 0.35rem 0.5rem;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		background: var(--surface);
+		color: var(--text);
+		font-size: 0.8rem;
+		line-height: 1.3;
+		text-align: center;
+		white-space: normal;
+		transform: translateX(-50%);
+		box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+	}
+
+	.kanji-item:not([aria-expanded='true']):hover::after,
+	.kanji-item:not([aria-expanded='true']):focus-visible::after {
+		content: attr(data-tooltip);
+	}
+
+	.kanji-due {
+		top: calc(100% + 0.35rem);
+		bottom: auto;
+	}
+
+	.kanji-character {
+		display: grid;
+		place-items: center;
+		width: 2.75rem;
+		aspect-ratio: 1;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		font-size: 1.5rem;
+	}
+
+	.stage-track {
+		display: grid;
+		grid-template-columns: repeat(5, 1fr);
+		gap: 2px;
+		width: 2.75rem;
+	}
+
+	.stage-track span {
+		height: 3px;
+		border-radius: 1px;
+		background: var(--border);
+	}
+
+	.stage-track span.filled {
+		background: var(--accent);
 	}
 
 	.error {
