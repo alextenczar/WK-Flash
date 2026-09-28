@@ -9,6 +9,7 @@
 		showMnemonics,
 		showPartsOfSpeech,
 		showSrsChanges,
+		showTimeEstimate,
 		sortReviewCards
 	} from '$lib/review-preferences';
 	import { reviewAudioSettings } from '$lib/review-audio';
@@ -53,16 +54,35 @@
 	let missedIds = $state(new Set<number>());
 	let completedCount = $state(0);
 	let correctFirstTry = $state(0);
+	let responseTimeTotalMs = $state(0);
+	let responseTimeSamples = $state(0);
+	let wrongAnswerCount = $state(0);
+	let questionStartedAt = 0;
 	let seenAssignments = new Set<number>();
 	let wrapUp = $state(false);
 	let endingReview = $state(false);
 
 	const current = $derived(queue[0] ?? null);
+	const averageResponseTimeMs = $derived(responseTimeSamples > 0 ? responseTimeTotalMs / responseTimeSamples : null);
+	const estimatedRemainingReviewCount = $derived.by(() => {
+		const successRate = (completedCount + 9) / (completedCount + wrongAnswerCount + 10);
+		return Math.ceil(queue.length / successRate);
+	});
+	const estimatedRemainingTimeMs = $derived(
+		averageResponseTimeMs === null ? null : averageResponseTimeMs * estimatedRemainingReviewCount
+	);
 	const similarKanji = $derived(relatedSubjects.filter((subject) => subject.object === 'kanji'));
 	const vocabularyGroups = $derived(vocabularyByReading(relatedSubjects));
 
 	function mnemonicText(markup: string): string {
 		return markup.replace(/<\/?(?:radical|kanji|vocabulary|meaning|reading|ja)>/gi, '');
+	}
+
+	function formatDuration(milliseconds: number): string {
+		const totalMinutes = Math.max(0, Math.ceil(milliseconds / 60_000));
+		const hours = Math.floor(totalMinutes / 60);
+		const minutes = totalMinutes % 60;
+		return hours > 0 ? `${hours}h ${minutes}m` : `${minutes} min`;
 	}
 
 	function resetMoreInfo() {
@@ -136,6 +156,9 @@
 			seenAssignments: [...seenAssignments],
 			completedCount,
 			correctFirstTry,
+			responseTimeTotalMs,
+			responseTimeSamples,
+			wrongAnswerCount,
 			wrapUp,
 			flipped
 		});
@@ -159,9 +182,13 @@
 		seenAssignments = new Set(saved.seenAssignments);
 		completedCount = saved.completedCount;
 		correctFirstTry = saved.correctFirstTry;
+		responseTimeTotalMs = Number.isFinite(saved.responseTimeTotalMs) ? Math.max(0, saved.responseTimeTotalMs ?? 0) : 0;
+		responseTimeSamples = Number.isInteger(saved.responseTimeSamples) ? Math.max(0, saved.responseTimeSamples ?? 0) : 0;
+		wrongAnswerCount = Number.isInteger(saved.wrongAnswerCount) ? Math.max(0, saved.wrongAnswerCount ?? 0) : 0;
 		wrapUp = saved.wrapUp;
 		flipped = false;
 		phase = 'question';
+		questionStartedAt = performance.now();
 		saveCurrentSession();
 		return true;
 	}
@@ -240,9 +267,13 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			seenAssignments = new Set();
 			completedCount = 0;
 			correctFirstTry = 0;
+			responseTimeTotalMs = 0;
+			responseTimeSamples = 0;
+			wrongAnswerCount = 0;
 			wrapUp = false;
 			flipped = false;
 			phase = 'question';
+			questionStartedAt = performance.now();
 			saveCurrentSession();
 		} catch (e) {
 			error = e instanceof WaniKaniError ? e.message : 'Something went wrong.';
@@ -312,6 +343,12 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		if (!current || endingReview) return;
 		error = '';
 		const card = current;
+		const answerDurationMs = performance.now() - questionStartedAt;
+		if (Number.isFinite(answerDurationMs) && answerDurationMs >= 0 && answerDurationMs < 300_000) {
+			responseTimeTotalMs += answerDurationMs;
+			responseTimeSamples += 1;
+		}
+		questionStartedAt = performance.now();
 		resetMoreInfo();
 		flipped = false;
 
@@ -319,6 +356,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		seenAssignments.add(card.assignmentId);
 
 		if (!wasCorrect) {
+			wrongAnswerCount += 1;
 			card.incorrectCount += 1;
 			missedIds = new Set(missedIds).add(card.assignmentId);
 		}
@@ -433,6 +471,15 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 					<div class="progress-fill" style="width: {(completedCount / totalUnique) * 100}%"></div>
 				</div>
 				<p class="muted">{completedCount} / {totalUnique} complete{wrapUp ? ' · finishing missed cards' : ''}</p>
+				{#if $showTimeEstimate}
+					<p class="muted time-estimate" aria-live="polite">
+						{#if estimatedRemainingTimeMs === null}
+							Estimating time remaining...
+						{:else}
+							About {formatDuration(estimatedRemainingTimeMs)} remaining
+						{/if}
+					</p>
+				{/if}
 			</div>
 			<div class="session-actions">
 				<button class="finish-missed" onclick={endReview} disabled={endingReview}>
@@ -669,6 +716,10 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 
 	.progress-details p {
 		margin: 0.45rem 0 0;
+	}
+
+	.time-estimate {
+		font-variant-numeric: tabular-nums;
 	}
 
 	.session-actions {
@@ -987,7 +1038,6 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		.progress-details {
 			flex-basis: 100%;
 		}
-
 		.session-actions {
 			margin-left: auto;
 		}

@@ -352,7 +352,10 @@ export async function getImmediatelyAvailableReviewAssignments(
 	return assignments;
 }
 
-export async function getJLPTProgressData(apiToken: string): Promise<{
+export async function getJLPTProgressData(
+	apiToken: string,
+	options: { includeForecastData?: boolean } = {}
+): Promise<{
 	kanji: { subjects: WKSubject[]; assignments: WKAssignment[] };
 	vocabulary: { subjects: WKSubject[]; assignments: WKAssignment[] };
 	activitySubjects: WKSubject[];
@@ -377,6 +380,7 @@ export async function getJLPTProgressData(apiToken: string): Promise<{
 	const assignmentsAreFresh = matchingCache !== null && matchingCache.maxAccessibleLevel === maxAccessibleLevel &&
 		Date.now() - matchingCache.assignmentsFetchedAt < JLPT_ASSIGNMENTS_CACHE_TTL;
 	const types = 'radical,kanji,vocabulary,kana_vocabulary';
+	const includeForecastData = options.includeForecastData ?? true;
 	const updatedAfter = new Date();
 	updatedAfter.setHours(0, 0, 0, 0);
 	const [subjects, assignments, reviewStatistics, levelProgressions] = await Promise.all([
@@ -386,17 +390,21 @@ export async function getJLPTProgressData(apiToken: string): Promise<{
 		assignmentsAreFresh
 			? Promise.resolve(matchingCache.assignments)
 			: wkFetchAllPages<WKAssignment>(`/assignments?subject_types=${types}&levels=${assignmentLevels}`, apiToken),
-		wkFetchAllPages<WKReviewStatistic>(
-			`/review_statistics?updated_after=${encodeURIComponent(updatedAfter.toISOString())}`,
-			apiToken
-		).catch((error: unknown) => {
-			console.warn('Could not load WaniKani review statistics.', error);
-			return null;
-		}),
-		wkFetchAllPages<WKLevelProgression>('/level_progressions', apiToken).catch((error: unknown) => {
-			console.warn('Could not load WaniKani level progressions.', error);
-			return null;
-		})
+		includeForecastData
+			? wkFetchAllPages<WKReviewStatistic>(
+				`/review_statistics?updated_after=${encodeURIComponent(updatedAfter.toISOString())}`,
+				apiToken
+			).catch((error: unknown) => {
+				console.warn('Could not load WaniKani review statistics.', error);
+				return null;
+			})
+			: Promise.resolve(null),
+		includeForecastData
+			? wkFetchAllPages<WKLevelProgression>('/level_progressions', apiToken).catch((error: unknown) => {
+				console.warn('Could not load WaniKani level progressions.', error);
+				return null;
+			})
+			: Promise.resolve(null)
 	]);
 	await cacheJLPTProgressData(cache, {
 		userId: user.id,

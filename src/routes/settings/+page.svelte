@@ -9,6 +9,7 @@
 		showMnemonics,
 		showPartsOfSpeech,
 		showSrsChanges,
+		showTimeEstimate,
 		type ReviewSortOrder
 	} from '$lib/review-preferences';
 	import { clearReviewSession } from '$lib/review-session';
@@ -152,6 +153,14 @@
 				onchange={(event) => showSrsChanges.set(event.currentTarget.checked)}
 			/>
 			Show SRS level changes after answering
+		</label>
+		<label class="toggle">
+			<input
+				type="checkbox"
+				checked={$showTimeEstimate}
+				onchange={(event) => showTimeEstimate.set(event.currentTarget.checked)}
+			/>
+			Show estimated time remaining on the review progress bar
 		</label>
 		<label class="toggle">
 			<input

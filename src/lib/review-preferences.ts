@@ -34,6 +34,17 @@ export const showPartsOfSpeech = {
 	}
 };
 
+const SHOW_TIME_ESTIMATE_KEY = 'wk-flash:show-time-estimate';
+const showTimeEstimateStore = writable(readLocalStorage(SHOW_TIME_ESTIMATE_KEY) !== 'false');
+
+export const showTimeEstimate = {
+	subscribe: showTimeEstimateStore.subscribe,
+	set(value: boolean) {
+		writeLocalStorage(SHOW_TIME_ESTIMATE_KEY, String(value));
+		showTimeEstimateStore.set(value);
+	}
+};
+
 export const reviewSortOptions = [
 	{ value: 'default', label: 'Default (WaniKani order)' },
 	{ value: 'srs-ascending', label: 'SRS stage (ascending)' },

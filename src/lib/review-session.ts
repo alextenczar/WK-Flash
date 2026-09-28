@@ -13,6 +13,9 @@ export interface ReviewSessionSnapshot {
 	seenAssignments: number[];
 	completedCount: number;
 	correctFirstTry: number;
+	responseTimeTotalMs?: number;
+	responseTimeSamples?: number;
+	wrongAnswerCount?: number;
 	wrapUp: boolean;
 	flipped: boolean;
 }

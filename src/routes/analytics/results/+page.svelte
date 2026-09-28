@@ -168,7 +168,7 @@
 		loading = true;
 		error = '';
 		try {
-			progress = await getJLPTProgressData($apiKey);
+			progress = await getJLPTProgressData($apiKey, { includeForecastData: false });
 		} catch (cause) {
 			error = cause instanceof WaniKaniError ? cause.message : 'Could not load JLPT progress.';
 		} finally {
