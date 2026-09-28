@@ -183,6 +183,7 @@
 				oninput={(event) => reviewAudioSettings.update({ volume: Number(event.currentTarget.value) })}
 			/>
 		</label>
+		<p class="muted audio-note">On iPhone, audio may not play while Silent mode is on.</p>
 	</section>
 
 	<section class="preferences" id="keybindings">
@@ -325,6 +326,11 @@
 	.volume-value {
 		color: var(--muted);
 		font-variant-numeric: tabular-nums;
+	}
+
+	.audio-note {
+		margin: 0.5rem 0 0;
+		font-size: 0.875rem;
 	}
 
 	.muted {
