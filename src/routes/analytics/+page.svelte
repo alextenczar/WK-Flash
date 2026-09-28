@@ -4,10 +4,20 @@
 	import jlptVocabulary from '$lib/data/jlpt-vocabulary.json';
 	import { apiKey } from '$lib/storage';
 	import { getJLPTProgressData, WaniKaniError } from '$lib/wanikani/api';
-	import type { WKAssignment, WKSubject } from '$lib/wanikani/types';
+	import { calculateDailyReviewActivity, type DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
+	import { calculateLevelUpForecast } from '$lib/wanikani/level-up-forecast';
+	import type { WKAssignment, WKLevelProgression, WKReviewStatistic, WKSubject } from '$lib/wanikani/types';
 
 	type JLPTLevel = keyof typeof jlptKanji;
 	type JLPTProgressData = { subjects: WKSubject[]; assignments: WKAssignment[] };
+	type LevelUpData = {
+		currentLevel: number;
+		maxSubjectLevel: number;
+		subjects: WKSubject[];
+		assignments: WKAssignment[];
+		reviewStatistics: WKReviewStatistic[] | null;
+		levelProgressions: WKLevelProgression[] | null;
+	};
 	type VocabularyEntry = { expression: string; reading: string; meaning: string; levels: JLPTLevel[] };
 	type VocabularyRow = {
 		entry: VocabularyEntry;
@@ -52,8 +62,31 @@
 	let vocabularySearch = $state('');
 	let progress = $state<JLPTProgressData | null>(null);
 	let vocabularyProgress = $state<JLPTProgressData | null>(null);
+	let dailyReviewActivity = $state<DailyReviewActivity | null>(null);
+	let levelUpData = $state<LevelUpData | null>(null);
+	let targetDaysPerLevel = $state(7);
 	let loading = $state(true);
 	let error = $state('');
+
+	const levelUpForecast = $derived.by(() => levelUpData
+		? calculateLevelUpForecast({
+			currentLevel: levelUpData.currentLevel,
+			maxSubjectLevel: levelUpData.maxSubjectLevel,
+			targetDays: targetDaysPerLevel,
+			subjects: levelUpData.subjects,
+			assignments: levelUpData.assignments,
+			reviewStatistics: levelUpData.reviewStatistics,
+			levelProgressions: levelUpData.levelProgressions
+		})
+		: null);
+
+	function formatDays(days: number | null): string {
+		if (days === null) return 'Not enough history';
+		if (days === 0) return 'Ready';
+		if (days < 1) return 'Less than a day';
+		const rounded = Math.round(days * 10) / 10;
+		return `${rounded} day${rounded === 1 ? '' : 's'}`;
+	}
 
 	const subjectsByCharacter = $derived.by(() => {
 		const subjects = new Map<string, WKSubject>();
@@ -191,6 +224,7 @@
 		if (!$apiKey) {
 			progress = null;
 			vocabularyProgress = null;
+			levelUpData = null;
 			error = 'Connect a WaniKani API key to see your JLPT progress.';
 			loading = false;
 			return;
@@ -202,6 +236,16 @@
 			const data = await getJLPTProgressData($apiKey);
 			progress = data.kanji;
 			vocabularyProgress = data.vocabulary;
+			levelUpData = {
+				currentLevel: data.currentLevel,
+				maxSubjectLevel: data.maxSubjectLevel,
+				subjects: data.activitySubjects,
+				assignments: data.activityAssignments,
+				reviewStatistics: data.reviewStatistics,
+				levelProgressions: data.levelProgressions
+			};
+			const activity = calculateDailyReviewActivity(data.activityAssignments, data.reviewStatistics);
+			dailyReviewActivity = data.reviewStatistics === null && activity.count === 0 ? null : activity;
 		} catch (cause) {
 			error = cause instanceof WaniKaniError ? cause.message : 'Could not load JLPT progress.';
 		} finally {
@@ -234,6 +278,82 @@
 				<a href="/settings">Connect WaniKani</a>
 			{/if}
 		</p>
+	{/if}
+	{#if $apiKey}
+		<section class="daily-review-summary" aria-labelledby="daily-review-heading">
+			<div>
+				<h2 id="daily-review-heading">Reviews completed today</h2>
+				<p>
+					{#if loading}
+						Updating from WaniKani...
+					{:else if !dailyReviewActivity}
+						Daily review activity is unavailable.
+					{:else if dailyReviewActivity.source === 'assignment_updates'}
+						Estimated from WaniKani assignment updates.
+					{:else if dailyReviewActivity.source === 'review_statistics'}
+						Counted from WaniKani review statistics.
+					{:else}
+						No review activity synced today.
+					{/if}
+				</p>
+			</div>
+			<strong class="daily-review-count" aria-live="polite">
+				{loading ? '...' : dailyReviewActivity?.count ?? '—'}
+			</strong>
+		</section>
+	{/if}
+	{#if $apiKey}
+		<section class="level-up-calculator" aria-labelledby="level-up-heading">
+			<div class="level-up-heading">
+				<div>
+					<h2 id="level-up-heading">Level-up calculator</h2>
+					<p class="muted">Choose your target time for each level-up.</p>
+				</div>
+				<label class="target-days-control" for="target-days">
+					<span>Days per level</span>
+					<input
+						id="target-days"
+						type="number"
+						min="7"
+						max="90"
+						step="1"
+						bind:value={targetDaysPerLevel}
+						onchange={(event) => {
+							const value = Number(event.currentTarget.value);
+							targetDaysPerLevel = Number.isFinite(value) ? Math.max(7, Math.min(90, Math.round(value))) : 7;
+						}}
+						disabled={loading || !levelUpData}
+					/>
+				</label>
+			</div>
+			{#if loading}
+				<p class="muted" role="status">Calculating level-up pace...</p>
+			{:else if levelUpForecast}
+				<div class="daily-target">
+					<div>
+						<span>Estimated reviews per day across all levels</span>
+						<p>{levelUpForecast.scheduledReviews} scheduled reviews + {levelUpForecast.newItemsPerLevel} new items at {levelUpForecast.averageReviewsPerNewItem.toFixed(1)} reviews each over {levelUpForecast.forecastHorizonDays} days</p>
+					</div>
+					<strong>~{levelUpForecast.averageDailyReviews}</strong>
+				</div>
+			<p class="daily-target-plan">Estimated total: {levelUpForecast.scheduledReviews + levelUpForecast.estimatedReviewsPerLevel} reviews in the selected window.</p>
+				<div class="level-up-stats">
+					<div class="level-up-stat">
+						<span>Current level progress</span>
+						<strong>{levelUpForecast.currentGuruKanji} / {levelUpForecast.requiredGuruKanji} kanji at Guru</strong>
+					</div>
+					<div class="level-up-stat">
+						<span>Average level-up time to date</span>
+						<strong>{formatDays(levelUpForecast.averageLevelDays)}</strong>
+					</div>
+					<div class="level-up-stat">
+						<span>Estimated time to next level</span>
+						<strong>{formatDays(levelUpForecast.estimatedDaysToNextLevel)}</strong>
+					</div>
+				</div>
+				<p class="method-note level-up-note">Includes scheduled reviews from existing assignments across levels, but excludes unstarted queued lessons. New upcoming-level items are estimated to Guru using five successful stage advances, with misses counted as retries. Recent accuracy is used only with at least 100 answers and 80% or better; otherwise it assumes 90%. The level-up ETA projects current kanji through SRS intervals and the 90% Guru gate{levelUpForecast.etaSource === 'historical_fallback' ? ', with historical timing used where direct projections are incomplete' : levelUpForecast.etaSource === 'srs_minimum' ? ', using minimum SRS timing where direct projections are incomplete' : ''}.</p>
+			{/if}
+		</section>
 	{/if}
 
 	<section class="jlpt-section" aria-labelledby="jlpt-heading">
@@ -411,6 +531,12 @@
 </div>
 
 <style>
+	.analytics-page {
+		display: flex;
+		flex-direction: column;
+		gap: 1.5rem;
+	}
+
 	.page-heading,
 	.list-heading {
 		display: flex;
@@ -425,7 +551,7 @@
 	}
 
 	.jlpt-section {
-		margin-top: 1.5rem;
+		margin: 0;
 	}
 
 	.jlpt-section > h2 {
@@ -439,6 +565,130 @@
 		font-weight: 400;
 	}
 
+	.daily-review-summary {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin: 0;
+		padding: 0.8rem 0;
+		border-block: 1px solid var(--border);
+	}
+
+	.daily-review-summary + .level-up-calculator {
+		margin-top: -0.75rem;
+	}
+
+	.daily-review-summary h2 {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.daily-review-summary p {
+		margin: 0.25rem 0 0;
+		color: var(--muted);
+		font-size: 0.85rem;
+	}
+
+	.daily-review-count {
+		flex: 0 0 auto;
+		font-size: 1.6rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.level-up-calculator {
+		margin: 0;
+		padding: 0.25rem 0 1rem;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.level-up-heading {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.level-up-heading h2 {
+		margin: 0;
+		font-size: 1.1rem;
+	}
+
+	.level-up-heading p {
+		margin: 0.25rem 0 0;
+	}
+
+	.target-days-control {
+		display: grid;
+		gap: 0.35rem;
+		color: var(--muted);
+		font-size: 0.8rem;
+	}
+
+	.target-days-control input {
+		width: 5rem;
+		padding: 0.5rem 0.65rem;
+		border: 1px solid var(--border);
+		border-radius: 6px;
+		background: var(--surface);
+		color: var(--text);
+		font: inherit;
+	}
+
+	.daily-target {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-top: 1rem;
+		padding: 0.8rem 0;
+		border-block: 1px solid var(--border);
+	}
+
+	.daily-target span {
+		font-weight: 600;
+	}
+
+	.daily-target p {
+		margin: 0.25rem 0 0;
+		color: var(--muted);
+		font-size: 0.8rem;
+	}
+
+	.daily-target-plan {
+		margin: 0.4rem 0 0;
+		color: var(--muted);
+		font-size: 0.85rem;
+	}
+
+	.daily-target strong {
+		flex: 0 0 auto;
+		font-size: 1.8rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.level-up-stats {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 1rem;
+		margin-top: 0.9rem;
+	}
+
+	.level-up-stat span {
+		color: var(--muted);
+		font-size: 0.8rem;
+	}
+
+	.level-up-stat strong {
+		display: block;
+		margin-top: 0.25rem;
+		font-size: 0.95rem;
+	}
+
+	.level-up-note {
+		margin-bottom: 0;
+	}
+
 	.method-note {
 		margin: 0.35rem 0 1.5rem;
 		color: var(--muted);
@@ -446,7 +696,7 @@
 	}
 
 	.message {
-		margin: 0 0 1rem;
+		margin: 0;
 		color: var(--bad);
 	}
 
@@ -656,6 +906,10 @@
 	}
 
 	@media (max-width: 560px) {
+		.level-up-stats {
+			grid-template-columns: 1fr 1fr;
+		}
+
 		.level-tabs {
 			grid-template-columns: repeat(5, minmax(0, 1fr));
 			gap: 0.3rem;

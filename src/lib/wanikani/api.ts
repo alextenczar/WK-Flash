@@ -1,5 +1,5 @@
 import { browser } from '$app/environment';
-import type { ReviewCard, WKAssignment, WKSubject, WKUser } from './types';
+import type { ReviewCard, WKAssignment, WKLevelProgression, WKReviewStatistic, WKSubject, WKUser } from './types';
 
 const BASE_URL = 'https://api.wanikani.com/v2';
 const SUBJECT_CACHE_NAME = 'wk-flash-wanikani-subjects-v1';
@@ -7,7 +7,7 @@ const SUBJECT_CACHE_TTL = 24 * 60 * 60 * 1000;
 const JLPT_ASSIGNMENTS_CACHE_TTL = 60 * 1000;
 const MAX_RATE_LIMIT_RETRIES = 2;
 const REVIEW_QUEUE_CACHE_PATH = '/__wk-flash-cache/review-queue';
-const JLPT_PROGRESS_CACHE_PATH = '/__wk-flash-cache/jlpt-progress';
+const JLPT_PROGRESS_CACHE_PATH = '/__wk-flash-cache/jlpt-progress-v3';
 export const REVIEW_QUEUE_FRESH_MS = 60 * 1000;
 
 interface CachedJLPTProgressData {
@@ -69,6 +69,18 @@ async function wkFetchResponse(input: RequestInfo | URL, init?: RequestInit): Pr
 		if (response.status !== 429 || retryCount >= MAX_RATE_LIMIT_RETRIES) return response;
 		await new Promise((resolve) => setTimeout(resolve, retryDelay(response, retryCount)));
 	}
+}
+
+function requestPath(input: RequestInfo | URL): string {
+	const value = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+	const url = new URL(value, BASE_URL);
+	return `${url.pathname}${url.search}`;
+}
+
+async function apiError(response: Response, input: RequestInfo | URL): Promise<WaniKaniError> {
+	const body = (await response.text()).trim().slice(0, 500);
+	const detail = body ? `: ${body}` : '';
+	return new WaniKaniError(`WaniKani API ${requestPath(input)} returned ${response.status}${detail}`, response.status);
 }
 
 async function openSubjectCache(): Promise<Cache | null> {
@@ -269,7 +281,7 @@ async function wkFetch<T>(path: string, apiToken: string): Promise<T> {
 	if (!res.ok) {
 		if (res.status === 401) throw new WaniKaniError('Invalid API key.', 401);
 		if (res.status === 429) throw new WaniKaniError('WaniKani rate limit reached. Please try again shortly.', 429);
-		throw new WaniKaniError(`WaniKani API error (${res.status}).`, res.status);
+		throw await apiError(res, `${BASE_URL}${path}`);
 	}
 	return res.json() as Promise<T>;
 }
@@ -289,7 +301,7 @@ async function wkFetchAllPages<T>(path: string, apiToken: string): Promise<T[]> 
 		if (!res.ok) {
 			if (res.status === 401) throw new WaniKaniError('Invalid API key.', 401);
 			if (res.status === 429) throw new WaniKaniError('WaniKani rate limit reached. Please try again shortly.', 429);
-			throw new WaniKaniError(`WaniKani API error (${res.status}).`, res.status);
+			throw await apiError(res, nextUrl);
 		}
 		const json: { data: T[]; pages: { next_url: string | null } } = await res.json();
 		results.push(...json.data);
@@ -301,6 +313,11 @@ async function wkFetchAllPages<T>(path: string, apiToken: string): Promise<T[]> 
 
 export async function getUser(apiToken: string): Promise<WKUser> {
 	const json = await wkFetch<{ data: WKUser }>('/user', apiToken);
+	return json.data;
+}
+
+export async function getAssignment(apiToken: string, assignmentId: number): Promise<WKAssignment> {
+	const json = await wkFetch<{ data: WKAssignment }>(`/assignments/${assignmentId}`, apiToken);
 	return json.data;
 }
 
@@ -319,9 +336,32 @@ export async function getReviewAssignments(
 	return wkFetchAllPages<WKAssignment>(reviewAssignmentsPath(maxAccessibleLevel), apiToken);
 }
 
+export async function getImmediatelyAvailableReviewAssignments(
+	apiToken: string,
+	assignmentIds: number[]
+): Promise<WKAssignment[]> {
+	const assignments: WKAssignment[] = [];
+	const uniqueIds = [...new Set(assignmentIds)];
+	for (let index = 0; index < uniqueIds.length; index += 100) {
+		const ids = uniqueIds.slice(index, index + 100).join(',');
+		assignments.push(...await wkFetchAllPages<WKAssignment>(
+			`/assignments?ids=${ids}&immediately_available_for_review=true`,
+			apiToken
+		));
+	}
+	return assignments;
+}
+
 export async function getJLPTProgressData(apiToken: string): Promise<{
 	kanji: { subjects: WKSubject[]; assignments: WKAssignment[] };
 	vocabulary: { subjects: WKSubject[]; assignments: WKAssignment[] };
+	activitySubjects: WKSubject[];
+	activityAssignments: WKAssignment[];
+	reviewStatistics: WKReviewStatistic[] | null;
+	levelProgressions: WKLevelProgression[] | null;
+	currentLevel: number;
+	maxAccessibleLevel: number;
+	maxSubjectLevel: number;
 }> {
 	const user = await getUser(apiToken);
 	const maxAccessibleLevel = Math.min(user.level, user.subscription.max_level_granted);
@@ -336,14 +376,27 @@ export async function getJLPTProgressData(apiToken: string): Promise<{
 	const subjectsAreFresh = matchingCache !== null && Date.now() - matchingCache.subjectsFetchedAt < SUBJECT_CACHE_TTL;
 	const assignmentsAreFresh = matchingCache !== null && matchingCache.maxAccessibleLevel === maxAccessibleLevel &&
 		Date.now() - matchingCache.assignmentsFetchedAt < JLPT_ASSIGNMENTS_CACHE_TTL;
-	const types = 'kanji,vocabulary,kana_vocabulary';
-	const [subjects, assignments] = await Promise.all([
+	const types = 'radical,kanji,vocabulary,kana_vocabulary';
+	const updatedAfter = new Date();
+	updatedAfter.setHours(0, 0, 0, 0);
+	const [subjects, assignments, reviewStatistics, levelProgressions] = await Promise.all([
 		subjectsAreFresh
 			? Promise.resolve(matchingCache.subjects)
 			: wkFetchAllPages<WKSubject>(`/subjects?types=${types}&levels=${subjectLevels}`, apiToken),
 		assignmentsAreFresh
 			? Promise.resolve(matchingCache.assignments)
-			: wkFetchAllPages<WKAssignment>(`/assignments?subject_types=${types}&levels=${assignmentLevels}`, apiToken)
+			: wkFetchAllPages<WKAssignment>(`/assignments?subject_types=${types}&levels=${assignmentLevels}`, apiToken),
+		wkFetchAllPages<WKReviewStatistic>(
+			`/review_statistics?updated_after=${encodeURIComponent(updatedAfter.toISOString())}`,
+			apiToken
+		).catch((error: unknown) => {
+			console.warn('Could not load WaniKani review statistics.', error);
+			return null;
+		}),
+		wkFetchAllPages<WKLevelProgression>('/level_progressions', apiToken).catch((error: unknown) => {
+			console.warn('Could not load WaniKani level progressions.', error);
+			return null;
+		})
 	]);
 	await cacheJLPTProgressData(cache, {
 		userId: user.id,
@@ -355,6 +408,13 @@ export async function getJLPTProgressData(apiToken: string): Promise<{
 		assignments
 	});
 	return {
+		activitySubjects: subjects,
+		activityAssignments: assignments,
+		reviewStatistics,
+		levelProgressions,
+		currentLevel: user.level,
+		maxAccessibleLevel,
+		maxSubjectLevel,
 		kanji: {
 			subjects: subjects.filter((subject) => subject.object === 'kanji'),
 			assignments: assignments.filter((assignment) => assignment.data.subject_type === 'kanji')
@@ -473,6 +533,7 @@ function reviewCardsFromData(
 		if (!subject) return [];
 		return [{
 			assignmentId: assignment.id,
+			availableAt: assignment.data.available_at,
 			srsStage: assignment.data.srs_stage,
 			maxAccessibleLevel,
 			currentUserLevel,

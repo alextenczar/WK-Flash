@@ -1,11 +1,18 @@
 import { browser } from '$app/environment';
 import { get, writable } from 'svelte/store';
-import { removeCachedReviewCard, submitReview } from '$lib/wanikani/api';
+import {
+	getAssignment,
+	getImmediatelyAvailableReviewAssignments,
+	removeCachedReviewCard,
+	submitReview,
+	WaniKaniError
+} from '$lib/wanikani/api';
 
 const STORAGE_KEY = 'wk-flash:pending-reviews';
 
 export interface PendingReviewSubmission {
 	assignmentId: number;
+	availableAt?: string | null;
 	incorrectCount: number;
 	needsReading: boolean;
 	startingSrsStage?: number;
@@ -99,11 +106,19 @@ function removeQueuedReviewSubmission(assignmentId: number): void {
 	pendingReviews.update((reviews) => reviews.filter((item) => item.assignmentId !== assignmentId));
 }
 
+function isNotYetAvailable(availableAt: string | null | undefined): boolean {
+	const timestamp = availableAt ? Date.parse(availableAt) : Number.NaN;
+	return Number.isFinite(timestamp) && timestamp > Date.now();
+}
+
 let syncing = false;
 const inFlightAssignmentIds = new Set<number>();
 
 export async function submitQueuedReview(apiToken: string, review: PendingReviewSubmission) {
 	queueReviewSubmission(review);
+	if (isNotYetAvailable(review.availableAt)) {
+		return { startingSrsStage: review.startingSrsStage ?? null, endingSrsStage: null };
+	}
 	inFlightAssignmentIds.add(review.assignmentId);
 	try {
 		const result = await submitReview(
@@ -123,8 +138,23 @@ export async function syncPendingReviews(apiToken: string): Promise<void> {
 	if (!browser || !navigator.onLine || !apiToken || syncing) return;
 	syncing = true;
 	try {
-		for (const review of get(pendingReviews)) {
+		const queuedReviews = get(pendingReviews);
+		if (queuedReviews.length === 0) return;
+		let immediatelyAvailableIds: Set<number>;
+		try {
+			const availableAssignments = await getImmediatelyAvailableReviewAssignments(
+				apiToken,
+				queuedReviews.map((review) => review.assignmentId)
+			);
+			immediatelyAvailableIds = new Set(availableAssignments.map((assignment) => assignment.id));
+		} catch (error: unknown) {
+			console.warn('Could not check queued review availability with WaniKani.', error);
+			return;
+		}
+
+		for (const review of queuedReviews) {
 			if (!navigator.onLine) break;
+			if (!immediatelyAvailableIds.has(review.assignmentId)) continue;
 			if (inFlightAssignmentIds.has(review.assignmentId)) continue;
 			inFlightAssignmentIds.add(review.assignmentId);
 			try {
@@ -142,7 +172,24 @@ export async function syncPendingReviews(apiToken: string): Promise<void> {
 						endingStage: endingSrsStage
 					});
 				}
-			} catch {
+			} catch (error: unknown) {
+				if (error instanceof WaniKaniError && error.status === 422 && error.message.includes('created_at')) {
+					try {
+						const assignment = await getAssignment(apiToken, review.assignmentId);
+						const stageChanged = review.startingSrsStage !== undefined &&
+							assignment.data.srs_stage !== review.startingSrsStage;
+						const dueTimeAdvanced = review.availableAt && assignment.data.available_at &&
+							Date.parse(assignment.data.available_at) > Date.parse(review.availableAt);
+						if (stageChanged || dueTimeAdvanced || isNotYetAvailable(assignment.data.available_at)) {
+							removeQueuedReviewSubmission(review.assignmentId);
+							console.warn(`Discarded stale queued review for assignment ${review.assignmentId}; WaniKani reports stage ${assignment.data.srs_stage} and next due ${assignment.data.available_at}.`);
+							continue;
+						}
+					} catch (refreshError: unknown) {
+						console.warn(`Could not refresh WaniKani assignment ${review.assignmentId}.`, refreshError);
+					}
+				}
+				console.warn(`Could not sync queued WaniKani review for assignment ${review.assignmentId}.`, error);
 				break;
 			} finally {
 				inFlightAssignmentIds.delete(review.assignmentId);

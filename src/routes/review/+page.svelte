@@ -337,6 +337,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			saveCurrentSession();
 			const reviewSubmission = {
 				assignmentId: card.assignmentId,
+				availableAt: card.availableAt,
 				incorrectCount: card.incorrectCount,
 				needsReading: card.needsReading,
 				startingSrsStage: card.srsStage,
