@@ -423,7 +423,7 @@
 					<div class="list-scroll" role="region" aria-label="Scrollable kanji progress results">
 					<ul class="kanji-list">
 						<li class="column-headings kanji-columns" aria-hidden="true">
-							<span>Item</span><span>Meaning</span><span>WK level</span><span>Status</span><span>SRS</span>
+							<span>Item</span><span>Meaning</span><span>WK level</span><span>Status</span><span class="stage">SRS</span>
 						</li>
 						{#each displayedKanji as row (row.character)}
 							<li>
@@ -511,9 +511,9 @@
 			{:else if vocabularyProgress}
 				{#if visibleVocabulary.length}
 					<div class="list-scroll" role="region" aria-label="Scrollable vocabulary progress results">
-					<ul class="kanji-list">
+					<ul class="kanji-list vocabulary-list">
 						<li class="column-headings vocabulary-columns" aria-hidden="true">
-							<span>Item</span><span>Meaning</span><span>WK level</span><span>Status</span><span>SRS</span>
+							<span>Item</span><span>Meaning</span><span>WK level</span><span>Status</span><span class="stage">SRS</span>
 						</li>
 						{#each displayedVocabulary as row (`${row.entry.expression}-${row.entry.reading}`)}
 							<li>
@@ -874,15 +874,17 @@
 
 	.kanji-list li {
 		display: grid;
-		grid-template-columns: 3.5rem minmax(0, 1fr) 4rem minmax(7.5rem, auto) 3.5rem;
+		grid-template-columns: 3.5rem 12rem 4rem 7.5rem 3.5rem minmax(0, 1fr);
 		align-items: center;
 		gap: 0.75rem;
+		min-width: 34.25rem;
 		min-height: 56px;
 		border-top: 1px solid var(--border);
 	}
 
-	.kanji-list li.vocabulary-columns {
-		grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr) 4rem minmax(7.5rem, auto) 3.5rem;
+	.kanji-list.vocabulary-list li {
+		grid-template-columns: 12rem 12rem 4rem 7.5rem 3.5rem minmax(0, 1fr);
+		min-width: 42.75rem;
 	}
 
 	.kanji-list li.column-headings {
@@ -890,6 +892,10 @@
 		color: var(--muted);
 		font-size: 0.75rem;
 		font-weight: 600;
+	}
+
+	.meaning {
+		min-width: 0;
 	}
 
 	.vocabulary-expression {
@@ -941,7 +947,7 @@
 	.stage {
 		color: var(--muted);
 		font-size: 0.75rem;
-		text-align: right;
+		text-align: left;
 		white-space: nowrap;
 	}
 
@@ -991,10 +997,6 @@
 		.progress-marker {
 			top: -2px;
 			height: 8px;
-		}
-
-		.kanji-list {
-			min-width: 620px;
 		}
 
 		.vocabulary-expression {
