@@ -164,7 +164,7 @@ export function calculateLevelUpForecast({
 	const totalCurrentKanji = currentKanji.length;
 	const requiredGuruKanji = totalCurrentKanji ? Math.ceil(totalCurrentKanji * 0.9) : 0;
 	const currentGuruKanji = currentKanji.filter((subject) =>
-		(assignmentsBySubjectId.get(subject.id)?.data.srs_stage ?? 0) >= GURU_STAGE
+		assignmentsBySubjectId.get(subject.id)?.data.passed_at != null
 	).length;
 	const upcomingLevel = currentLevel < maxSubjectLevel ? currentLevel + 1 : null;
 	const newSubjects = upcomingLevel === null ? [] : subjects.filter((subject) =>

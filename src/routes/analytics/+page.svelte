@@ -344,7 +344,7 @@
 				<div class="level-up-stats">
 					<div class="level-up-stat">
 						<span>Current level progress</span>
-						<strong>{levelUpForecast.currentGuruKanji} / {levelUpForecast.requiredGuruKanji} kanji at Guru</strong>
+						<strong>{levelUpForecast.currentGuruKanji} / {levelUpForecast.totalCurrentKanji} kanji at Guru</strong>
 					</div>
 					<div class="level-up-stat">
 						<span>Average level-up time to date</span>
