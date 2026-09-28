@@ -94,6 +94,11 @@
 	box-sizing: border-box;
 }
 
+::selection {
+	background: #fff;
+	color: #000;
+}
+
 body {
 	display: flex;
 	flex-direction: column;
