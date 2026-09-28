@@ -4,7 +4,7 @@ import type { ReviewCard, WKAssignment, WKLevelProgression, WKReviewStatistic, W
 const BASE_URL = 'https://api.wanikani.com/v2';
 const SUBJECT_CACHE_NAME = 'wk-flash-wanikani-subjects-v1';
 const SUBJECT_CACHE_TTL = 24 * 60 * 60 * 1000;
-const JLPT_ASSIGNMENTS_CACHE_TTL = 60 * 1000;
+const JLPT_ASSIGNMENTS_CACHE_TTL = 5 * 60 * 1000;
 const MAX_RATE_LIMIT_RETRIES = 2;
 const REVIEW_QUEUE_CACHE_PATH = '/__wk-flash-cache/review-queue';
 const JLPT_PROGRESS_CACHE_PATH = '/__wk-flash-cache/jlpt-progress-v3';
