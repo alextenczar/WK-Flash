@@ -285,7 +285,7 @@
 				<h2 id="daily-review-heading">Reviews completed today</h2>
 				<p>
 					{#if loading}
-						Updating from WaniKani...
+						Updating from WaniKani<span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span>
 					{:else if !dailyReviewActivity}
 						Daily review activity is unavailable.
 					{:else if dailyReviewActivity.source === 'assignment_updates'}
@@ -298,7 +298,11 @@
 				</p>
 			</div>
 			<strong class="daily-review-count" aria-live="polite">
-				{loading ? '...' : dailyReviewActivity?.count ?? '—'}
+				{#if loading}
+					<span class="loading-dots" role="status" aria-label="Loading review count"><span></span><span></span><span></span></span>
+				{:else}
+					{dailyReviewActivity?.count ?? '—'}
+				{/if}
 			</strong>
 		</section>
 	{/if}
@@ -327,7 +331,7 @@
 				</label>
 			</div>
 			{#if loading}
-				<p class="muted" role="status">Calculating level-up pace...</p>
+				<p class="muted" role="status">Calculating level-up pace<span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span></p>
 			{:else if levelUpForecast}
 				<div class="daily-target">
 					<div>
@@ -375,7 +379,11 @@
 				>
 					<span class="level-name">{count.level}</span>
 					<span class="level-count">
-						{loading ? '...' : progress ? `${count.learned} / ${count.total}` : `— / ${count.total}`}
+						{#if loading}
+							<span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+						{:else}
+							{progress ? `${count.learned} / ${count.total}` : `— / ${count.total}`}
+						{/if}
 					</span>
 					<span class="progress-track" aria-hidden="true">
 						<span class="progress-fill" style={`width: ${count.total ? (count.learned / count.total) * 100 : 0}%`}></span>
@@ -409,7 +417,7 @@
 			</div>
 
 			{#if loading}
-				<p class="empty-state" role="status">Loading kanji progress...</p>
+				<p class="empty-state" role="status">Loading kanji progress<span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span></p>
 			{:else if progress}
 				{#if visibleKanji.length}
 					<div class="list-scroll" role="region" aria-label="Scrollable kanji progress results">
@@ -461,7 +469,11 @@
 				>
 					<span class="level-name">{count.level}</span>
 					<span class="level-count">
-						{loading ? '...' : vocabularyProgress ? `${count.learned} / ${count.total}` : `— / ${count.total}`}
+						{#if loading}
+							<span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+						{:else}
+							{vocabularyProgress ? `${count.learned} / ${count.total}` : `— / ${count.total}`}
+						{/if}
 					</span>
 					<span class="progress-track" aria-hidden="true">
 						<span class="progress-fill" style={`width: ${count.total ? (count.learned / count.total) * 100 : 0}%`}></span>
@@ -495,7 +507,7 @@
 			</div>
 
 			{#if loading}
-				<p class="empty-state" role="status">Loading vocabulary progress...</p>
+				<p class="empty-state" role="status">Loading vocabulary progress<span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span></p>
 			{:else if vocabularyProgress}
 				{#if visibleVocabulary.length}
 					<div class="list-scroll" role="region" aria-label="Scrollable vocabulary progress results">
@@ -548,6 +560,51 @@
 	.page-heading h1,
 	.list-heading h2 {
 		margin: 0;
+	}
+
+	.loading-dots {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.16em;
+		margin-left: 0.15em;
+		vertical-align: baseline;
+	}
+
+	.loading-dots > span {
+		width: 0.2em;
+		aspect-ratio: 1;
+		border-radius: 50%;
+		background: currentColor;
+		opacity: 0.3;
+		animation: analytics-loading-dot 1.1s ease-in-out infinite;
+	}
+
+	.loading-dots > span:nth-child(2) {
+		animation-delay: 0.15s;
+	}
+
+	.loading-dots > span:nth-child(3) {
+		animation-delay: 0.3s;
+	}
+
+	@keyframes analytics-loading-dot {
+		0%,
+		60%,
+		100% {
+			opacity: 0.3;
+			transform: translateY(0);
+		}
+		30% {
+			opacity: 1;
+			transform: translateY(-0.18em);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.loading-dots > span {
+			animation: none;
+			opacity: 1;
+		}
 	}
 
 	.jlpt-section {
