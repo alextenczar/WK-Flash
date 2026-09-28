@@ -27,6 +27,7 @@
 		passedAt: string | null;
 	}[] | null>(null);
 	let selectedKanjiCharacter = $state<string | null>(null);
+	let selectedKanjiPopupPosition = $state<{ left: number; top: number } | null>(null);
 	let now = $state(Date.now());
 	let hasSavedReview = $state(false);
 	let hasCachedReviewQueue = $state(false);
@@ -178,7 +179,37 @@
 	function dismissKanjiPopup(event: MouseEvent) {
 		if (!(event.target instanceof Element) || !event.target.closest('.kanji-item')) {
 			selectedKanjiCharacter = null;
+			selectedKanjiPopupPosition = null;
 		}
+	}
+
+	function handleKanjiClick(event: MouseEvent, character: string) {
+		if (window.matchMedia('(hover: none) and (pointer: coarse)').matches) {
+			toggleKanjiPopup(event, character);
+		}
+	}
+
+	function toggleKanjiPopup(event: MouseEvent, character: string) {
+		if (selectedKanjiCharacter === character) {
+			selectedKanjiCharacter = null;
+			selectedKanjiPopupPosition = null;
+			return;
+		}
+
+		const target = event.currentTarget as HTMLButtonElement;
+		const bounds = target.getBoundingClientRect();
+		const popupWidth = Math.min(192, window.innerWidth * 0.75);
+		const left = Math.max(
+			12,
+			Math.min(bounds.left + bounds.width / 2 - popupWidth / 2, window.innerWidth - popupWidth - 12)
+		);
+		const popupHeight = 48;
+		const below = bounds.bottom + 8;
+		const top = below + popupHeight <= window.innerHeight - 8
+			? below
+			: Math.max(8, bounds.top - popupHeight - 8);
+		selectedKanjiCharacter = character;
+		selectedKanjiPopupPosition = { left, top };
 	}
 </script>
 
@@ -258,7 +289,7 @@
 							data-tooltip={kanjiDueLabel(item)}
 							aria-label="{item.character}: {kanjiDueLabel(item)}"
 							aria-expanded={selectedKanjiCharacter === item.character}
-							onclick={() => selectedKanjiCharacter = selectedKanjiCharacter === item.character ? null : item.character}
+							onclick={(event) => handleKanjiClick(event, item.character)}
 						>
 							<span class="kanji-character">{item.character}</span>
 							<span class="stage-track" aria-hidden="true">
@@ -267,7 +298,11 @@
 								{/each}
 							</span>
 							{#if selectedKanjiCharacter === item.character}
-								<span class="kanji-due" role="status">{kanjiDueLabel(item)}</span>
+								<span
+									class="kanji-due"
+									role="status"
+									style="left: {selectedKanjiPopupPosition?.left ?? 8}px; top: {selectedKanjiPopupPosition?.top ?? 8}px;"
+								>{kanjiDueLabel(item)}</span>
 							{/if}
 						</button>
 					{/each}
@@ -337,7 +372,6 @@
 		cursor: pointer;
 	}
 
-	.kanji-item:hover .kanji-character,
 	.kanji-item:focus-visible .kanji-character {
 		border-color: var(--accent);
 	}
@@ -347,8 +381,8 @@
 		outline-offset: 3px;
 	}
 
-	.kanji-item:not([aria-expanded='true']):hover::after,
 	.kanji-item:not([aria-expanded='true']):focus-visible::after,
+	.kanji-item:not([aria-expanded='true']):hover::after,
 	.kanji-due {
 		position: absolute;
 		z-index: 2;
@@ -369,18 +403,31 @@
 		box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
 	}
 
-	.kanji-item:not([aria-expanded='true']):hover::after,
 	.kanji-item:not([aria-expanded='true']):focus-visible::after {
 		content: attr(data-tooltip);
+	}
+
+	@media (hover: hover) and (pointer: fine) {
+		.kanji-item:hover {
+			z-index: 3;
+		}
+
+		.kanji-item:hover .kanji-character {
+			border-color: var(--accent);
+		}
+
+		.kanji-item:not([aria-expanded='true']):hover::after {
+			content: attr(data-tooltip);
+		}
 	}
 
 	.kanji-due {
 		position: fixed;
 		z-index: 10;
-		left: 50%;
+		left: auto;
 		top: auto;
-		bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
-		max-width: calc(100vw - 2rem);
+		bottom: auto;
+		transform: none;
 	}
 
 	.kanji-character {
