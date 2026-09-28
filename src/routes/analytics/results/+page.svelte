@@ -106,7 +106,7 @@
 					wanikaniLevel: subject?.data.level ?? null,
 					status: learned ? 'Learned' : inProgress ? 'In progress' : subject ? 'Not started' : 'Not available',
 					statusClass: learned ? 'learned' : inProgress ? 'in-progress' : subject ? 'not-started' : 'unavailable',
-					detail: stage === undefined ? '' : `SRS ${stage}`
+					detail: stage === undefined ? '—' : `SRS ${stage}`
 				};
 				});
 		}
@@ -135,7 +135,7 @@
 					wanikaniLevel: subject?.data.level ?? null,
 					status: learned ? 'Learned' : inProgress ? 'In progress' : subject ? 'Not started' : 'Not available',
 					statusClass: learned ? 'learned' : inProgress ? 'in-progress' : subject ? 'not-started' : 'unavailable',
-					detail: stage === undefined ? '' : `SRS ${stage}`
+					detail: stage === undefined ? '—' : `SRS ${stage}`
 				};
 			});
 	});
@@ -225,7 +225,7 @@
 		<div class="list-scroll" role="region" aria-label="Scrollable JLPT progress results">
 		<ul class="results-list" class:vocabulary-list={resultType === 'vocabulary'}>
 			<li class="column-headings" aria-hidden="true">
-				<span>Item</span><span>JLPT</span><span>WK level</span><span>Meaning</span><span>Status</span><span>SRS</span>
+				<span>Item</span><span>JLPT</span><span>WK level</span><span>Meaning</span><span>Status</span><span class="stage">SRS</span>
 			</li>
 			{#each visibleRows as row (row.key)}
 				<li>
@@ -306,6 +306,8 @@
 		grid-template-columns: 3.5rem 5rem 4rem minmax(0, 1fr) minmax(7.5rem, auto) 3.5rem;
 		align-items: center;
 		gap: 0.75rem;
+		box-sizing: border-box;
+		padding-right: 1rem;
 		min-height: 56px;
 		border-top: 1px solid var(--border);
 	}
@@ -370,7 +372,7 @@
 	.stage {
 		color: var(--muted);
 		font-size: 0.75rem;
-		text-align: right;
+		text-align: left;
 		white-space: nowrap;
 	}
 

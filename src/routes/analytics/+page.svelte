@@ -431,7 +431,7 @@
 								<span class="meaning">{row.meaning || ' '}</span>
 								<span class="wk-level">{row.subjectLevel === null ? '—' : row.subjectLevel}</span>
 								<span class={`status status--${row.statusClass}`}>{row.status}</span>
-								<span class="stage">{row.srsStage === null ? '' : `SRS ${row.srsStage}`}</span>
+								<span class="stage">{row.srsStage === null ? '—' : `SRS ${row.srsStage}`}</span>
 							</li>
 						{/each}
 					</ul>
@@ -521,7 +521,7 @@
 								<span class="meaning">{row.entry.meaning}</span>
 								<span class="wk-level">{row.subjectLevel === null ? '—' : row.subjectLevel}</span>
 								<span class={`status status--${row.statusClass}`}>{row.status}</span>
-								<span class="stage">{row.srsStage === null ? '' : `SRS ${row.srsStage}`}</span>
+								<span class="stage">{row.srsStage === null ? '—' : `SRS ${row.srsStage}`}</span>
 							</li>
 						{/each}
 					</ul>
