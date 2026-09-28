@@ -174,7 +174,15 @@
 		if (dueAt <= now) return 'Due now';
 		return `Due ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(dueAt)}`;
 	}
+
+	function dismissKanjiPopup(event: MouseEvent) {
+		if (!(event.target instanceof Element) || !event.target.closest('.kanji-item')) {
+			selectedKanjiCharacter = null;
+		}
+	}
 </script>
+
+<svelte:window onclick={dismissKanjiPopup} />
 
 <div class="container">
 	{#if loading}
@@ -367,8 +375,12 @@
 	}
 
 	.kanji-due {
-		top: calc(100% + 0.35rem);
-		bottom: auto;
+		position: fixed;
+		z-index: 10;
+		left: 50%;
+		top: auto;
+		bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+		max-width: calc(100vw - 2rem);
 	}
 
 	.kanji-character {

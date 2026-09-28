@@ -669,11 +669,10 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				</div>
 			{/if}
 		</div>
-		{#if $showSrsChanges && $latestSrsStageUpdate}
+		{#if $showSrsChanges && $latestSrsStageUpdate && $latestSrsStageUpdate.endingStage !== $latestSrsStageUpdate.startingStage}
 			<div
 				class="srs-stage-notification"
 				class:decreased={$latestSrsStageUpdate.endingStage < $latestSrsStageUpdate.startingStage}
-				class:unchanged={$latestSrsStageUpdate.endingStage === $latestSrsStageUpdate.startingStage}
 				role="status"
 				aria-live="polite"
 			>
