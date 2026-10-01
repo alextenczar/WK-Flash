@@ -376,6 +376,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	function undoPreviousQuestion() {
 		if (!undoSnapshot || endingReview) return;
 		if (pendingReviewSubmission) removeQueuedReviewSubmission(pendingReviewSubmission.assignmentId);
+		latestSrsStageUpdate.set(null);
 
 		queue = undoSnapshot.queue;
 		pendingIds = new Set(undoSnapshot.pendingIds);
@@ -396,15 +397,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 
 	async function submitReview(review: PendingReviewSubmission) {
 		try {
-			const { startingSrsStage, endingSrsStage } = await submitQueuedReview($apiKey, review);
-			const startingStage = startingSrsStage ?? review.startingSrsStage;
-			if ($showSrsChanges && startingStage !== undefined && endingSrsStage !== null) {
-				recordSrsStageUpdate({
-					subjectLabel: review.subjectLabel ?? 'Review',
-					startingStage,
-					endingStage: endingSrsStage
-				});
-			}
+			await submitQueuedReview($apiKey, review);
 		} catch (e) {
 			if (e instanceof WaniKaniError) {
 				error = `${e.message} The result is saved and will retry when connected.`;
@@ -462,6 +455,13 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				startingSrsStage: card.srsStage,
 				subjectLabel: card.subject.data.characters ?? card.subject.data.slug
 			};
+			if ($showSrsChanges && card.srsStage !== undefined) {
+				recordSrsStageUpdate({
+					subjectLabel: reviewSubmission.subjectLabel,
+					startingStage: card.srsStage,
+					endingStage: null
+				});
+			}
 			if ($showUndoButton) {
 				queueReviewSubmission(reviewSubmission);
 				pendingReviewSubmission = reviewSubmission;
@@ -741,7 +741,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		{#if $showSrsChanges && $latestSrsStageUpdate && $latestSrsStageUpdate.endingStage !== $latestSrsStageUpdate.startingStage}
 			<div
 				class="srs-stage-notification"
-				class:decreased={$latestSrsStageUpdate.endingStage < $latestSrsStageUpdate.startingStage}
+				class:decreased={$latestSrsStageUpdate.endingStage !== null && $latestSrsStageUpdate.endingStage < $latestSrsStageUpdate.startingStage}
 				role="status"
 				aria-live="polite"
 			>

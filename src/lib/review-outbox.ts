@@ -22,7 +22,7 @@ export interface PendingReviewSubmission {
 export interface SrsStageUpdate {
 	subjectLabel: string;
 	startingStage: number;
-	endingStage: number;
+	endingStage: number | null;
 }
 
 const SRS_STAGE_LABELS: Record<number, string> = {
@@ -51,6 +51,9 @@ export function recordSrsStageUpdate(update: SrsStageUpdate): void {
 }
 
 export function formatSrsStageUpdate(update: SrsStageUpdate): string {
+	if (update.endingStage === null) {
+		return `${update.subjectLabel}: answer recorded. SRS update pending.`;
+	}
 	if (update.endingStage < update.startingStage) {
 		return `${update.subjectLabel}: SRS stage decreased from ${srsStageLabel(update.startingStage)} to ${srsStageLabel(update.endingStage)}.`;
 	}
@@ -158,20 +161,12 @@ export async function syncPendingReviews(apiToken: string): Promise<void> {
 			if (inFlightAssignmentIds.has(review.assignmentId)) continue;
 			inFlightAssignmentIds.add(review.assignmentId);
 			try {
-				const { startingSrsStage, endingSrsStage } = await submitReview(
+				await submitReview(
 					apiToken,
 					review.assignmentId,
 					review.incorrectCount,
 					review.needsReading
 				);
-				const startingStage = startingSrsStage ?? review.startingSrsStage;
-				if (startingStage !== undefined && endingSrsStage !== null) {
-					recordSrsStageUpdate({
-						subjectLabel: review.subjectLabel ?? 'Review',
-						startingStage,
-						endingStage: endingSrsStage
-					});
-				}
 			} catch (error: unknown) {
 				if (error instanceof WaniKaniError && error.status === 422 && error.message.includes('created_at')) {
 					try {
