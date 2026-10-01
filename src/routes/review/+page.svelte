@@ -95,6 +95,11 @@
 		return hours > 0 ? `${hours}h ${minutes}m` : `${minutes} min`;
 	}
 
+	function predictSrsStage(startingStage: number, incorrectCount: number): number {
+		const stageChange = incorrectCount > 0 ? -1 : 1;
+		return Math.min(9, Math.max(1, startingStage + stageChange));
+	}
+
 	function resetMoreInfo() {
 		moreInfoOpen = false;
 		moreInfoLoading = false;
@@ -459,7 +464,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				recordSrsStageUpdate({
 					subjectLabel: reviewSubmission.subjectLabel,
 					startingStage: card.srsStage,
-					endingStage: null
+					endingStage: predictSrsStage(card.srsStage, card.incorrectCount)
 				});
 			}
 			if ($showUndoButton) {
@@ -741,7 +746,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		{#if $showSrsChanges && $latestSrsStageUpdate && $latestSrsStageUpdate.endingStage !== $latestSrsStageUpdate.startingStage}
 			<div
 				class="srs-stage-notification"
-				class:decreased={$latestSrsStageUpdate.endingStage !== null && $latestSrsStageUpdate.endingStage < $latestSrsStageUpdate.startingStage}
+				class:decreased={$latestSrsStageUpdate.endingStage < $latestSrsStageUpdate.startingStage}
 				role="status"
 				aria-live="polite"
 			>

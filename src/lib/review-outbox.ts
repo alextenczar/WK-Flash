@@ -22,7 +22,7 @@ export interface PendingReviewSubmission {
 export interface SrsStageUpdate {
 	subjectLabel: string;
 	startingStage: number;
-	endingStage: number | null;
+	endingStage: number;
 }
 
 const SRS_STAGE_LABELS: Record<number, string> = {
@@ -51,9 +51,6 @@ export function recordSrsStageUpdate(update: SrsStageUpdate): void {
 }
 
 export function formatSrsStageUpdate(update: SrsStageUpdate): string {
-	if (update.endingStage === null) {
-		return `${update.subjectLabel}: answer recorded. SRS update pending.`;
-	}
 	if (update.endingStage < update.startingStage) {
 		return `${update.subjectLabel}: SRS stage decreased from ${srsStageLabel(update.startingStage)} to ${srsStageLabel(update.endingStage)}.`;
 	}
