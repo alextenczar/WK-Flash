@@ -45,6 +45,17 @@ export const showTimeEstimate = {
 	}
 };
 
+const SHOW_UNDO_BUTTON_KEY = 'wk-flash:show-undo-button';
+const showUndoButtonStore = writable(readLocalStorage(SHOW_UNDO_BUTTON_KEY) === 'true');
+
+export const showUndoButton = {
+	subscribe: showUndoButtonStore.subscribe,
+	set(value: boolean) {
+		writeLocalStorage(SHOW_UNDO_BUTTON_KEY, String(value));
+		showUndoButtonStore.set(value);
+	}
+};
+
 export const reviewSortOptions = [
 	{ value: 'default', label: 'Default (WaniKani order)' },
 	{ value: 'srs-ascending', label: 'SRS stage (ascending)' },

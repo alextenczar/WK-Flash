@@ -102,7 +102,7 @@ export function queueReviewSubmission(review: PendingReviewSubmission): void {
 	void removeCachedReviewCard(review.assignmentId);
 }
 
-function removeQueuedReviewSubmission(assignmentId: number): void {
+export function removeQueuedReviewSubmission(assignmentId: number): void {
 	pendingReviews.update((reviews) => reviews.filter((item) => item.assignmentId !== assignmentId));
 }
 

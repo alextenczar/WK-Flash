@@ -1,7 +1,21 @@
 import { browser } from '$app/environment';
 import type { ReviewCard } from '$lib/wanikani/types';
+import type { PendingReviewSubmission } from '$lib/review-outbox';
 
 const STORAGE_KEY = 'wk-flash:active-review';
+
+export interface ReviewUndoSnapshot {
+	queue: ReviewCard[];
+	pendingIds: number[];
+	missedIds: number[];
+	seenAssignments: number[];
+	completedCount: number;
+	correctFirstTry: number;
+	responseTimeTotalMs: number;
+	responseTimeSamples: number;
+	wrongAnswerCount: number;
+	flipped: boolean;
+}
 
 export interface ReviewSessionSnapshot {
 	version: 1;
@@ -18,6 +32,8 @@ export interface ReviewSessionSnapshot {
 	wrongAnswerCount?: number;
 	wrapUp: boolean;
 	flipped: boolean;
+	undoSnapshot?: ReviewUndoSnapshot | null;
+	pendingReviewSubmission?: PendingReviewSubmission | null;
 }
 
 export function readReviewSession(): ReviewSessionSnapshot | null {

@@ -10,10 +10,16 @@
 		showPartsOfSpeech,
 		showSrsChanges,
 		showTimeEstimate,
+		showUndoButton,
 		sortReviewCards
 	} from '$lib/review-preferences';
 	import { reviewAudioSettings } from '$lib/review-audio';
-	import { clearReviewSession, readReviewSession, saveReviewSession } from '$lib/review-session';
+	import {
+		clearReviewSession,
+		readReviewSession,
+		saveReviewSession,
+		type ReviewUndoSnapshot
+	} from '$lib/review-session';
 	import {
 		buildReviewQueue,
 		getCachedReviewQueue,
@@ -28,8 +34,10 @@
 		pendingReviews,
 		queueReviewSubmission,
 		recordSrsStageUpdate,
+		removeQueuedReviewSubmission,
 		syncPendingReviews,
-		submitQueuedReview
+		submitQueuedReview,
+		type PendingReviewSubmission
 	} from '$lib/review-outbox';
 	import type { ReviewCard, WKSubject } from '$lib/wanikani/types';
 
@@ -61,6 +69,8 @@
 	let seenAssignments = new Set<number>();
 	let wrapUp = $state(false);
 	let endingReview = $state(false);
+	let undoSnapshot = $state<ReviewUndoSnapshot | null>(null);
+	let pendingReviewSubmission = $state<PendingReviewSubmission | null>(null);
 
 	const current = $derived(queue[0] ?? null);
 	const averageResponseTimeMs = $derived(responseTimeSamples > 0 ? responseTimeTotalMs / responseTimeSamples : null);
@@ -160,7 +170,9 @@
 			responseTimeSamples,
 			wrongAnswerCount,
 			wrapUp,
-			flipped
+			flipped,
+			undoSnapshot,
+			pendingReviewSubmission
 		});
 	}
 
@@ -187,6 +199,8 @@
 		wrongAnswerCount = Number.isInteger(saved.wrongAnswerCount) ? Math.max(0, saved.wrongAnswerCount ?? 0) : 0;
 		wrapUp = saved.wrapUp;
 		flipped = false;
+		undoSnapshot = saved.undoSnapshot ?? null;
+		pendingReviewSubmission = saved.pendingReviewSubmission ?? null;
 		phase = 'question';
 		questionStartedAt = performance.now();
 		saveCurrentSession();
@@ -272,6 +286,8 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			wrongAnswerCount = 0;
 			wrapUp = false;
 			flipped = false;
+			undoSnapshot = null;
+			pendingReviewSubmission = null;
 			phase = 'question';
 			questionStartedAt = performance.now();
 			saveCurrentSession();
@@ -318,6 +334,8 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	}
 
 	function finishMissed() {
+		void commitPendingReview();
+		undoSnapshot = null;
 		resetMoreInfo();
 		wrapUp = true;
 		queue = queue.filter((card) => missedIds.has(card.assignmentId));
@@ -333,14 +351,78 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	async function endReview() {
 		if (endingReview) return;
 		endingReview = true;
+		await commitPendingReview();
 		if (navigator.onLine) await syncPendingReviews($apiKey);
 		if (navigator.onLine) clearReviewSession();
 		else saveCurrentSession();
 		await goto('/');
 	}
 
+	function createUndoSnapshot(): ReviewUndoSnapshot {
+		return {
+			queue: queue.map((card) => ({ ...card })),
+			pendingIds: [...pendingIds],
+			missedIds: [...missedIds],
+			seenAssignments: [...seenAssignments],
+			completedCount,
+			correctFirstTry,
+			responseTimeTotalMs,
+			responseTimeSamples,
+			wrongAnswerCount,
+			flipped
+		};
+	}
+
+	function undoPreviousQuestion() {
+		if (!undoSnapshot || endingReview) return;
+		if (pendingReviewSubmission) removeQueuedReviewSubmission(pendingReviewSubmission.assignmentId);
+
+		queue = undoSnapshot.queue;
+		pendingIds = new Set(undoSnapshot.pendingIds);
+		missedIds = new Set(undoSnapshot.missedIds);
+		seenAssignments = new Set(undoSnapshot.seenAssignments);
+		completedCount = undoSnapshot.completedCount;
+		correctFirstTry = undoSnapshot.correctFirstTry;
+		responseTimeTotalMs = undoSnapshot.responseTimeTotalMs;
+		responseTimeSamples = undoSnapshot.responseTimeSamples;
+		wrongAnswerCount = undoSnapshot.wrongAnswerCount;
+		flipped = undoSnapshot.flipped;
+		undoSnapshot = null;
+		pendingReviewSubmission = null;
+		questionStartedAt = performance.now();
+		resetMoreInfo();
+		saveCurrentSession();
+	}
+
+	async function submitReview(review: PendingReviewSubmission) {
+		try {
+			const { startingSrsStage, endingSrsStage } = await submitQueuedReview($apiKey, review);
+			const startingStage = startingSrsStage ?? review.startingSrsStage;
+			if ($showSrsChanges && startingStage !== undefined && endingSrsStage !== null) {
+				recordSrsStageUpdate({
+					subjectLabel: review.subjectLabel ?? 'Review',
+					startingStage,
+					endingStage: endingSrsStage
+				});
+			}
+		} catch (e) {
+			if (e instanceof WaniKaniError) {
+				error = `${e.message} The result is saved and will retry when connected.`;
+			}
+		}
+	}
+
+	async function commitPendingReview() {
+		if (!pendingReviewSubmission) return;
+		const review = pendingReviewSubmission;
+		pendingReviewSubmission = null;
+		await submitReview(review);
+	}
+
 	async function grade(wasCorrect: boolean) {
 		if (!current || endingReview) return;
+		void commitPendingReview();
+		undoSnapshot = $showUndoButton ? createUndoSnapshot() : null;
 		error = '';
 		const card = current;
 		const answerDurationMs = performance.now() - questionStartedAt;
@@ -372,7 +454,6 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			remaining.delete(card.assignmentId);
 			pendingIds = remaining;
 			completedCount = totalUnique - pendingIds.size;
-			saveCurrentSession();
 			const reviewSubmission = {
 				assignmentId: card.assignmentId,
 				availableAt: card.availableAt,
@@ -381,27 +462,11 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				startingSrsStage: card.srsStage,
 				subjectLabel: card.subject.data.characters ?? card.subject.data.slug
 			};
-			if (!navigator.onLine) {
+			if ($showUndoButton) {
 				queueReviewSubmission(reviewSubmission);
+				pendingReviewSubmission = reviewSubmission;
 			} else {
-				try {
-					const { startingSrsStage, endingSrsStage } = await submitQueuedReview(
-						$apiKey,
-						reviewSubmission
-					);
-					const startingStage = startingSrsStage ?? card.srsStage;
-					if ($showSrsChanges && startingStage !== undefined && endingSrsStage !== null) {
-						recordSrsStageUpdate({
-							subjectLabel: reviewSubmission.subjectLabel,
-							startingStage,
-							endingStage: endingSrsStage
-						});
-					}
-				} catch (e) {
-					if (e instanceof WaniKaniError) {
-						error = `${e.message} The result is saved and will retry when connected.`;
-					}
-				}
+				void submitReview(reviewSubmission);
 			}
 		} else {
 			// Send the card back into the deck a few cards later, Anki-style.
@@ -409,10 +474,11 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			const offset = Math.min(rest.length, 3 + Math.floor(Math.random() * 4));
 			rest.splice(offset, 0, card);
 			queue = rest;
-			saveCurrentSession();
 		}
+		saveCurrentSession();
 
 		if (queue.length === 0) {
+			void commitPendingReview();
 			clearReviewSession();
 			goto('/');
 		}
@@ -482,6 +548,9 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				{/if}
 			</div>
 			<div class="session-actions">
+				{#if $showUndoButton && undoSnapshot}
+					<button class="finish-missed" onclick={undoPreviousQuestion} disabled={endingReview}>Undo</button>
+				{/if}
 				<button class="finish-missed" onclick={endReview} disabled={endingReview}>
 					{endingReview ? 'Ending...' : 'End review'}
 				</button>

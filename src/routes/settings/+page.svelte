@@ -10,6 +10,7 @@
 		showPartsOfSpeech,
 		showSrsChanges,
 		showTimeEstimate,
+		showUndoButton,
 		type ReviewSortOrder
 	} from '$lib/review-preferences';
 	import { clearReviewSession } from '$lib/review-session';
@@ -161,6 +162,14 @@
 				onchange={(event) => showTimeEstimate.set(event.currentTarget.checked)}
 			/>
 			Show estimated time remaining on the review progress bar
+		</label>
+		<label class="toggle">
+			<input
+				type="checkbox"
+				checked={$showUndoButton}
+				onchange={(event) => showUndoButton.set(event.currentTarget.checked)}
+			/>
+			Show an undo button for the previous review question
 		</label>
 		<label class="toggle">
 			<input
