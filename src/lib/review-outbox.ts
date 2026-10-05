@@ -111,6 +111,36 @@ function isNotYetAvailable(availableAt: string | null | undefined): boolean {
 	return Number.isFinite(timestamp) && timestamp > Date.now();
 }
 
+function isCreatedAtError(error: unknown): error is WaniKaniError {
+	return error instanceof WaniKaniError && error.status === 422 && error.message.includes('created_at');
+}
+
+async function deferIfReviewIsNotAvailable(
+	apiToken: string,
+	review: PendingReviewSubmission
+): Promise<boolean> {
+	const availableAssignments = await getImmediatelyAvailableReviewAssignments(apiToken, [review.assignmentId]);
+	if (availableAssignments.some((assignment) => assignment.id === review.assignmentId)) return false;
+
+	// The card may have become unavailable because another device submitted it,
+	// or because the local clock was ahead of WaniKani's clock. Keep it queued
+	// in the latter case and discard it in the former.
+	try {
+		const assignment = await getAssignment(apiToken, review.assignmentId);
+		const stageChanged = review.startingSrsStage !== undefined &&
+			assignment.data.srs_stage !== review.startingSrsStage;
+		const dueTimeAdvanced = review.availableAt && assignment.data.available_at &&
+			Date.parse(assignment.data.available_at) > Date.parse(review.availableAt);
+		if (stageChanged || dueTimeAdvanced) {
+			removeQueuedReviewSubmission(review.assignmentId);
+			console.warn(`Discarded stale queued review for assignment ${review.assignmentId}.`);
+		}
+	} catch (refreshError: unknown) {
+		console.warn(`Could not refresh WaniKani assignment ${review.assignmentId}.`, refreshError);
+	}
+	return true;
+}
+
 let syncing = false;
 const inFlightAssignmentIds = new Set<number>();
 
@@ -121,12 +151,26 @@ export async function submitQueuedReview(apiToken: string, review: PendingReview
 	}
 	inFlightAssignmentIds.add(review.assignmentId);
 	try {
-		const result = await submitReview(
-			apiToken,
-			review.assignmentId,
-			review.incorrectCount,
-			review.needsReading
-		);
+		let result: Awaited<ReturnType<typeof submitReview>>;
+		try {
+			result = await submitReview(
+				apiToken,
+				review.assignmentId,
+				review.incorrectCount,
+				review.needsReading
+			);
+		} catch (error: unknown) {
+			if (!isCreatedAtError(error)) throw error;
+			// WaniKani validates its own current time when created_at is omitted.
+			// A just-due card can therefore fail while the device clock says it is
+			// ready. Leave it queued without showing a permanent submission error.
+			try {
+				await deferIfReviewIsNotAvailable(apiToken, review);
+			} catch (availabilityError: unknown) {
+				console.warn(`Could not verify WaniKani availability for assignment ${review.assignmentId}.`, availabilityError);
+			}
+			return { startingSrsStage: review.startingSrsStage ?? null, endingSrsStage: null };
+		}
 		removeQueuedReviewSubmission(review.assignmentId);
 		return result;
 	} finally {
@@ -165,18 +209,9 @@ export async function syncPendingReviews(apiToken: string): Promise<void> {
 					review.needsReading
 				);
 			} catch (error: unknown) {
-				if (error instanceof WaniKaniError && error.status === 422 && error.message.includes('created_at')) {
+				if (isCreatedAtError(error)) {
 					try {
-						const assignment = await getAssignment(apiToken, review.assignmentId);
-						const stageChanged = review.startingSrsStage !== undefined &&
-							assignment.data.srs_stage !== review.startingSrsStage;
-						const dueTimeAdvanced = review.availableAt && assignment.data.available_at &&
-							Date.parse(assignment.data.available_at) > Date.parse(review.availableAt);
-						if (stageChanged || dueTimeAdvanced || isNotYetAvailable(assignment.data.available_at)) {
-							removeQueuedReviewSubmission(review.assignmentId);
-							console.warn(`Discarded stale queued review for assignment ${review.assignmentId}; WaniKani reports stage ${assignment.data.srs_stage} and next due ${assignment.data.available_at}.`);
-							continue;
-						}
+						if (await deferIfReviewIsNotAvailable(apiToken, review)) continue;
 					} catch (refreshError: unknown) {
 						console.warn(`Could not refresh WaniKani assignment ${review.assignmentId}.`, refreshError);
 					}
