@@ -354,10 +354,71 @@
 		.page-heading {
 			align-items: flex-start;
 			flex-direction: column;
+			margin-bottom: 1rem;
+		}
+
+		.selection-toolbar,
+		.start-bar {
+			padding: 0.55rem 0;
 		}
 
 		.start-bar button {
 			width: 100%;
+			padding: 0.5rem 0.85rem;
+			font-size: 0.9rem;
+		}
+
+		.level-section {
+			margin-top: 1rem;
+		}
+
+		.lesson-list {
+			grid-template-columns: 1fr;
+			gap: 0.4rem;
+			margin-top: 0.65rem;
+		}
+
+		.lesson-row {
+			min-height: 0;
+			gap: 0.45rem;
+			padding: 0.4rem 0.5rem;
+			border-radius: 6px;
+		}
+
+		.lesson-character {
+			min-width: 1.85rem;
+			height: 1.85rem;
+			font-size: 1.15rem;
+		}
+
+		.lesson-details {
+			gap: 0;
+		}
+
+		.lesson-details strong {
+			font-size: 0.9rem;
+		}
+
+		.lesson-details span {
+			font-size: 0.7rem;
+		}
+
+		.lesson-details .lesson-reading {
+			font-size: 0.75rem;
+		}
+
+		.lesson-details span:last-child {
+			display: none;
+		}
+
+		.lesson-info {
+			padding: 0.2rem 0.4rem;
+			font-size: 0.7rem;
+		}
+
+		input[type='checkbox'] {
+			width: 0.95rem;
+			height: 0.95rem;
 		}
 	}
 </style>
