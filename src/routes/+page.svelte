@@ -83,6 +83,7 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 				cachedQueue &&
 				currentLevelKanji !== null &&
 				typeof cachedQueue.reviewCount === 'number' &&
+				cachedQueue.reviewCount > 0 &&
 				cachedQueue.nextReviewBatch !== undefined &&
 				(!cachedQueue.nextReviewBatch || Date.parse(cachedQueue.nextReviewBatch.availableAt) > Date.now()) &&
 				Date.now() - cachedQueue.fetchedAt < REVIEW_QUEUE_FRESH_MS

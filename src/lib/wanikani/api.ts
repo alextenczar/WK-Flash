@@ -276,12 +276,14 @@ export async function removeCachedReviewCard(assignmentId: number): Promise<void
 		if (response) {
 			const snapshot = (await response.json()) as CachedReviewQueue;
 			if (Array.isArray(snapshot.cards)) {
+				const cards = snapshot.cards.filter((card) => card.assignmentId !== assignmentId);
 				await cache.put(
 					request,
 					new Response(
 						JSON.stringify({
 							...snapshot,
-							cards: snapshot.cards.filter((card) => card.assignmentId !== assignmentId)
+							cards,
+							reviewCount: cards.length
 						}),
 						{ headers: { 'Content-Type': 'application/json' } }
 					)
@@ -365,15 +367,44 @@ function accessibleLevels(maxAccessibleLevel: number): string {
 	return Array.from({ length: maxAccessibleLevel }, (_, index) => index + 1).join(',');
 }
 
-function reviewAssignmentsPath(maxAccessibleLevel: number): string {
-	return `/assignments?immediately_available_for_review=true&levels=${accessibleLevels(maxAccessibleLevel)}`;
+async function getAssignmentsBySubjectIds(apiToken: string, subjectIds: number[]): Promise<WKAssignment[]> {
+	const assignments: WKAssignment[] = [];
+	const uniqueIds = [...new Set(subjectIds.filter((id) => Number.isInteger(id) && id > 0))];
+	for (let index = 0; index < uniqueIds.length; index += 100) {
+		const ids = uniqueIds.slice(index, index + 100).join(',');
+		assignments.push(...await wkFetchAllPages<WKAssignment>(`/assignments?subject_ids=${ids}`, apiToken));
+	}
+	return assignments.filter((assignment) => assignment.data.hidden !== true);
 }
 
-export async function getReviewAssignments(
-	apiToken: string,
-	maxAccessibleLevel: number
-): Promise<WKAssignment[]> {
-	return wkFetchAllPages<WKAssignment>(reviewAssignmentsPath(maxAccessibleLevel), apiToken);
+export async function getReviewAssignments(apiToken: string): Promise<WKAssignment[]> {
+	return wkFetchAllPages<WKAssignment>('/assignments?immediately_available_for_review=true', apiToken);
+}
+
+async function fetchReviewSummary(apiToken: string): Promise<{
+	currentSubjectIds: number[];
+	upcoming: NextReviewBatch[];
+}> {
+	const summary = await wkFetch<{
+		data: { reviews: { available_at: string; subject_ids: number[] }[] };
+	}>('/summary', apiToken);
+	const reviews = summary.data.reviews ?? [];
+	const currentSubjectIds = reviews[0]?.subject_ids?.filter((id) => Number.isInteger(id) && id > 0) ?? [];
+	const now = Date.now();
+	const nextDay = now + 24 * 60 * 60 * 1000;
+	const upcoming = reviews
+		.slice(1)
+		.filter((batch) => {
+			const availableAt = Date.parse(batch.available_at);
+			return batch.subject_ids.length > 0 && Number.isFinite(availableAt) && availableAt > now && availableAt <= nextDay;
+		})
+		.sort((left, right) => Date.parse(left.available_at) - Date.parse(right.available_at))
+		.map((batch) => ({
+			availableAt: batch.available_at,
+			count: batch.subject_ids.length,
+			subjectIds: batch.subject_ids
+		}));
+	return { currentSubjectIds, upcoming };
 }
 
 export async function getImmediatelyAvailableReviewAssignments(
@@ -587,31 +618,51 @@ export async function getLessonQueue(apiToken: string): Promise<LessonCard[]> {
 async function getAccessibleAssignments(apiToken: string): Promise<{
 	user: WKUser;
 	assignments: WKAssignment[];
+	reviewCount: number;
+	upcoming: NextReviewBatch[];
 	maxAccessibleLevel: number;
 }> {
 	const user = await getUser(apiToken);
 	const maxAccessibleLevel = Math.min(user.level, user.subscription.max_level_granted);
-	const assignments = await getReviewAssignments(apiToken, maxAccessibleLevel);
-	return { user, assignments, maxAccessibleLevel };
+	let currentSubjectIds: number[] = [];
+	let upcoming: NextReviewBatch[] = [];
+	try {
+		const summary = await fetchReviewSummary(apiToken);
+		currentSubjectIds = summary.currentSubjectIds;
+		upcoming = summary.upcoming;
+	} catch {
+		upcoming = [];
+	}
+	const assignments = currentSubjectIds.length
+		? await getAssignmentsBySubjectIds(apiToken, currentSubjectIds)
+		: await getReviewAssignments(apiToken);
+	return {
+		user,
+		assignments,
+		reviewCount: currentSubjectIds.length || assignments.length,
+		upcoming,
+		maxAccessibleLevel
+	};
 }
 
 async function getAccessibleReviewData(apiToken: string): Promise<{
 	user: WKUser;
 	assignments: WKAssignment[];
 	reviewCount: number;
+	upcoming: NextReviewBatch[];
 	subjectById: Map<number, WKSubject>;
 	maxAccessibleLevel: number;
 }> {
-	const { user, assignments, maxAccessibleLevel } = await getAccessibleAssignments(apiToken);
+	const { user, assignments, reviewCount, upcoming, maxAccessibleLevel } = await getAccessibleAssignments(apiToken);
 	const subjects = await getSubjectsByIds(
 		apiToken,
-		assignments.map((assignment) => assignment.data.subject_id),
-		maxAccessibleLevel
+		assignments.map((assignment) => assignment.data.subject_id)
 	);
 	const subjectById = new Map(subjects.map((subject) => [subject.id, subject]));
 	return {
 		user,
-		reviewCount: assignments.length,
+		reviewCount,
+		upcoming,
 		assignments: assignments.filter((assignment) => subjectById.has(assignment.data.subject_id)),
 		subjectById,
 		maxAccessibleLevel
@@ -655,12 +706,11 @@ export async function getReviewOverview(apiToken: string): Promise<{
 		passedAt: string | null;
 	}[] | null;
 }> {
-	const [reviewData, upcomingReviewBatches, dailyReviewActivity] = await Promise.all([
+	const [reviewData, dailyReviewActivity] = await Promise.all([
 		getAccessibleReviewData(apiToken),
-		getUpcomingReviewBatches(apiToken),
 		getTodayReviewActivity(apiToken)
 	]);
-	const { user, assignments, reviewCount, subjectById, maxAccessibleLevel } = reviewData;
+	const { user, assignments, reviewCount, upcoming: upcomingReviewBatches, subjectById, maxAccessibleLevel } = reviewData;
 	let currentLevelKanji: {
 		id: number;
 		character: string;
@@ -689,13 +739,8 @@ export async function getReviewOverview(apiToken: string): Promise<{
 	} catch {
 		// The home page can still show review information if this optional summary fails.
 	}
-	const cachedQueue = upcomingReviewBatches === undefined ? await getCachedReviewQueue() : null;
-	const nextReviewBatch = upcomingReviewBatches === undefined
-		? cachedQueue?.nextReviewBatch
-		: upcomingReviewBatches[0] ?? null;
-	const cachedUpcomingReviewBatches = upcomingReviewBatches === undefined
-		? cachedQueue?.upcomingReviewBatches
-		: upcomingReviewBatches;
+	const nextReviewBatch = upcomingReviewBatches[0] ?? null;
+	const cachedUpcomingReviewBatches = upcomingReviewBatches;
 	const cards = reviewCardsFromData(assignments, subjectById, maxAccessibleLevel, user.level);
 	await cacheReviewQueue(
 		cards,
@@ -729,29 +774,6 @@ export async function getTodayReviewActivity(apiToken: string): Promise<DailyRev
 		return calculateDailyReviewActivity(assignments, reviewStatistics);
 	} catch {
 		return null;
-	}
-}
-
-async function getUpcomingReviewBatches(apiToken: string): Promise<NextReviewBatch[] | undefined> {
-	try {
-		const summary = await wkFetch<{
-			data: { reviews: { available_at: string; subject_ids: number[] }[] };
-		}>('/summary', apiToken);
-		const now = Date.now();
-		const nextDay = now + 24 * 60 * 60 * 1000;
-		return summary.data.reviews
-			.filter((batch) => {
-				const availableAt = Date.parse(batch.available_at);
-				return batch.subject_ids.length > 0 && availableAt > now && availableAt <= nextDay;
-			})
-			.sort((left, right) => Date.parse(left.available_at) - Date.parse(right.available_at))
-			.map((batch) => ({
-				availableAt: batch.available_at,
-				count: batch.subject_ids.length,
-				subjectIds: batch.subject_ids
-			}));
-	} catch {
-		return undefined;
 	}
 }
 

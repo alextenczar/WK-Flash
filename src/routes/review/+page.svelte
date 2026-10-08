@@ -263,7 +263,11 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		if (cachedCards) return prepareReviewQueue(cachedCards);
 		throw new WaniKaniError('No offline review queue is saved on this device. Connect once to preload reviews.', 0);
 	}
-	if (cachedQueue && Date.now() - cachedQueue.fetchedAt < REVIEW_QUEUE_FRESH_MS) {
+	if (
+		cachedQueue &&
+		cachedQueue.cards.length > 0 &&
+		Date.now() - cachedQueue.fetchedAt < REVIEW_QUEUE_FRESH_MS
+	) {
 		return prepareReviewQueue(cachedCards ?? []);
 	}
 	try {

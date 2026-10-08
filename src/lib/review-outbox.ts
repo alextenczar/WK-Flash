@@ -188,21 +188,9 @@ export async function syncPendingReviews(apiToken: string): Promise<void> {
 	try {
 		const queuedReviews = get(pendingReviews);
 		if (queuedReviews.length === 0) return;
-		let immediatelyAvailableIds: Set<number>;
-		try {
-			const availableAssignments = await getImmediatelyAvailableReviewAssignments(
-				apiToken,
-				queuedReviews.map((review) => review.assignmentId)
-			);
-			immediatelyAvailableIds = new Set(availableAssignments.map((assignment) => assignment.id));
-		} catch (error: unknown) {
-			console.warn('Could not check queued review availability with WaniKani.', error);
-			return;
-		}
 
 		for (const review of queuedReviews) {
 			if (!navigator.onLine) break;
-			if (!immediatelyAvailableIds.has(review.assignmentId)) continue;
 			if (inFlightAssignmentIds.has(review.assignmentId)) continue;
 			inFlightAssignmentIds.add(review.assignmentId);
 			try {
