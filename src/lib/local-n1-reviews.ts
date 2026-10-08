@@ -5,7 +5,7 @@ import { readPersistent, writePersistent } from '$lib/persistent-storage';
 import type { ReviewCard, WKSubject, WKSubjectData } from '$lib/wanikani/types';
 
 const STORAGE_KEY = 'wk-flash:local-n1-review-progress';
-const LOCAL_CARD_RATIO = 10;
+const LOCAL_CARD_RATIO = 20;
 const LOCAL_SRS_INTERVALS_MS = [
 	4 * 60 * 60 * 1000,
 	8 * 60 * 60 * 1000,
