@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
+	import { pendingLessonStarts } from '$lib/lesson-outbox';
 	import { getLessonQueue, WaniKaniError, type LessonCard } from '$lib/wanikani/api';
 	import { primaryMeaning } from '$lib/wanikani/matching';
 
@@ -71,7 +72,8 @@
 		loading = true;
 		error = '';
 		try {
-			lessons = await getLessonQueue($apiKey);
+			const pendingStarts = new Set($pendingLessonStarts);
+			lessons = (await getLessonQueue($apiKey)).filter((lesson) => !pendingStarts.has(lesson.assignmentId));
 			selectedIds = new Set();
 		} catch (e) {
 			error = e instanceof WaniKaniError ? e.message : 'Unable to load lessons.';

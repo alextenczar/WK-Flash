@@ -86,7 +86,7 @@
 		Enter a WaniKani personal access token. You can generate one from your
 		<a href="https://www.wanikani.com/settings/personal_access_tokens" target="_blank" rel="noopener noreferrer"
 			>WaniKani account settings</a
-		>. It only needs the default read/write review scopes.
+		>. It needs the default scopes, including starting assignments and creating reviews.
 	</p>
 	<p class="muted">The key is stored only in this browser and never sent anywhere but WaniKani's API.</p>
 

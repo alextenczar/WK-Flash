@@ -33,6 +33,20 @@ function loadSettings(): ReviewAudioSettings {
 const store = writable<ReviewAudioSettings>(loadSettings());
 onPersistentHydrate(() => store.set(loadSettings()));
 
+let currentPlayer: HTMLAudioElement | null = null;
+
+/** Plays pronunciation without interrupting other audio sources (iOS ambient session). */
+export function playPronunciation(url: string | undefined, volume: number): Promise<boolean> {
+	if (!browser || !url) return Promise.resolve(false);
+	currentPlayer?.pause();
+	const audioSession = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+	if (audioSession) audioSession.type = 'ambient';
+	const player = new Audio(url);
+	player.volume = Math.min(1, Math.max(0, volume));
+	currentPlayer = player;
+	return player.play().then(() => true).catch(() => false);
+}
+
 export const reviewAudioSettings = {
 	subscribe: store.subscribe,
 	update(patch: Partial<ReviewAudioSettings>) {

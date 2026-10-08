@@ -15,7 +15,7 @@
 		showUndoButton,
 		sortReviewCards
 	} from '$lib/review-preferences';
-	import { reviewAudioSettings } from '$lib/review-audio';
+	import { playPronunciation, reviewAudioSettings } from '$lib/review-audio';
 	import {
 		clearReviewSession,
 		readReviewSession,
@@ -56,7 +56,6 @@
 	let error = $state('');
 	let audioError = $state('');
 	let flipped = $state(false);
-	let audioPlayer: HTMLAudioElement | null = null;
 	let moreInfoOpen = $state(false);
 	let moreInfoLoading = $state(false);
 	let moreInfoError = $state('');
@@ -365,13 +364,8 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		if (!url) return;
 
 		audioError = '';
-		audioPlayer?.pause();
-		const audioSession = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
-		if (audioSession) audioSession.type = 'ambient';
-		audioPlayer = new Audio(url);
-		audioPlayer.volume = $reviewAudioSettings.volume;
-		void audioPlayer.play().catch(() => {
-			audioError = 'Unable to play audio.';
+		void playPronunciation(url, $reviewAudioSettings.volume).then((played) => {
+			if (!played) audioError = 'Unable to play audio.';
 		});
 	}
 

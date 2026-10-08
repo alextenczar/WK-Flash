@@ -3,8 +3,9 @@
 	import { onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
 	import { keybindings } from '$lib/keybindings';
-	import { reviewAudioSettings } from '$lib/review-audio';
+	import { playPronunciation, reviewAudioSettings } from '$lib/review-audio';
 	import { showMnemonics, showPartsOfSpeech } from '$lib/review-preferences';
+	import { pendingLessonStarts, startQueuedLesson } from '$lib/lesson-outbox';
 	import { getLessonQueue, getSubjectsByIds, WaniKaniError, type LessonCard } from '$lib/wanikani/api';
 	import { allMeanings, primaryMeaning, readingsForDisplay, vocabularyByReading } from '$lib/wanikani/matching';
 	import type { WKSubject } from '$lib/wanikani/types';
@@ -17,7 +18,7 @@
 	let revealed = $state(false);
 	let loading = $state(true);
 	let error = $state('');
-	let audioPlayer: HTMLAudioElement | null = null;
+	let submitError = $state('');
 	let moreInfoOpen = $state(false);
 	let moreInfoLoading = $state(false);
 	let moreInfoError = $state('');
@@ -29,12 +30,7 @@
 	const vocabularyGroups = $derived(vocabularyByReading(relatedSubjects));
 
 	function playAudio(lesson: LessonCard) {
-		const url = lesson.subject.data.pronunciation_audios?.[0]?.url;
-		if (!url) return;
-		audioPlayer?.pause();
-		audioPlayer = new Audio(url);
-		audioPlayer.volume = $reviewAudioSettings.volume;
-		void audioPlayer.play();
+		void playPronunciation(lesson.subject.data.pronunciation_audios?.[0]?.url, $reviewAudioSettings.volume);
 	}
 
 	function mnemonicText(markup: string): string {
@@ -108,6 +104,7 @@
 
 	function next() {
 		resetMoreInfo();
+		submitError = '';
 		if (index >= cards.length - 1) {
 			phase = 'review';
 			reviewQueue = [...cards];
@@ -119,24 +116,37 @@
 		revealed = false;
 	}
 
+	function finishSession() {
+		try {
+			sessionStorage.removeItem(SELECTED_LESSONS_KEY);
+		} catch {
+			// The lesson still completed even if storage cleanup is unavailable.
+		}
+		void goto('/lessons');
+	}
+
 	function grade(wasCorrect: boolean) {
 		const card = reviewQueue[0];
 		if (!card) return;
 		resetMoreInfo();
-		if (wasCorrect) {
-			reviewQueue = reviewQueue.slice(1);
-		} else {
-			reviewQueue = [...reviewQueue.slice(1), card];
-		}
 		revealed = false;
-		if (reviewQueue.length === 0) {
-			try {
-				sessionStorage.removeItem(SELECTED_LESSONS_KEY);
-			} catch {
-				// The lesson still completed even if storage cleanup is unavailable.
-			}
-			void goto('/lessons');
+		submitError = '';
+
+		if (!wasCorrect) {
+			const rest = reviewQueue.slice(1);
+			const offset = Math.min(rest.length, 3 + Math.floor(Math.random() * 4));
+			rest.splice(offset, 0, card);
+			reviewQueue = rest;
+			return;
 		}
+
+		reviewQueue = reviewQueue.slice(1);
+		void startQueuedLesson($apiKey, card.assignmentId).catch((e: unknown) => {
+			submitError = e instanceof WaniKaniError
+				? `${e.message} The lesson is saved and will retry when connected.`
+				: 'Could not submit this lesson to WaniKani. It is saved and will retry when connected.';
+		});
+		if (reviewQueue.length === 0) finishSession();
 	}
 
 	onMount(() => {
@@ -158,7 +168,10 @@
 		void (async () => {
 			try {
 				const selected = new Set(selectedIds.filter((id) => Number.isInteger(id)));
-				cards = (await getLessonQueue($apiKey)).filter((card) => selected.has(card.assignmentId));
+				const pendingStarts = new Set($pendingLessonStarts);
+				cards = (await getLessonQueue($apiKey)).filter(
+					(card) => selected.has(card.assignmentId) && !pendingStarts.has(card.assignmentId)
+				);
 				if (!cards.length) void goto('/lessons');
 			} catch (e) {
 				error = e instanceof WaniKaniError ? e.message : 'Unable to load lessons.';
@@ -252,6 +265,9 @@
 					</button>
 				{/if}
 			</div>
+			{#if submitError}
+				<p class="error" role="alert">{submitError}</p>
+			{/if}
 			{#if revealed}
 				<div class="answers">
 					{#if current.subject.data.readings?.length}

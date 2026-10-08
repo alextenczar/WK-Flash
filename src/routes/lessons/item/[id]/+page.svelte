@@ -4,6 +4,7 @@
 	import { onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
 	import { getStaticLocalN1Subject } from '$lib/local-n1-reviews';
+	import { playPronunciation, reviewAudioSettings } from '$lib/review-audio';
 	import { getSubjectBySlug, getSubjectsByIds, WaniKaniError } from '$lib/wanikani/api';
 	import { allMeanings, primaryMeaning, readingsForDisplay, vocabularyByReading } from '$lib/wanikani/matching';
 	import type { WKSubject } from '$lib/wanikani/types';
@@ -15,7 +16,6 @@
 	let amalgamationSubjects = $state<WKSubject[]>([]);
 	let loading = $state(true);
 	let error = $state('');
-	let audioPlayer: HTMLAudioElement | null = null;
 	const similarKanji = $derived(similarSubjects.filter((item) => item.object === 'kanji'));
 	const vocabularyGroups = $derived(vocabularyByReading(amalgamationSubjects));
 	const cameFromHome = $derived(page.url.searchParams.get('from') === 'home');
@@ -28,11 +28,7 @@
 	}
 
 	function playAudio() {
-		const url = subject?.data.pronunciation_audios?.[0]?.url;
-		if (!url) return;
-		audioPlayer?.pause();
-		audioPlayer = new Audio(url);
-		void audioPlayer.play();
+		void playPronunciation(subject?.data.pronunciation_audios?.[0]?.url, $reviewAudioSettings.volume);
 	}
 
 	onMount(() => {

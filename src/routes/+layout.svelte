@@ -3,6 +3,7 @@
 	import '$lib/app.css';
 	import { initPersistentStorage } from '$lib/persistent-storage';
 	import { apiKey } from '$lib/storage';
+	import { syncPendingLessonStarts } from '$lib/lesson-outbox';
 	import { pendingReviews, syncPendingReviews } from '$lib/review-outbox';
 
 	let { children } = $props();
@@ -12,10 +13,16 @@
 		void initPersistentStorage();
 		const updateConnection = () => {
 			isOnline = navigator.onLine;
-			if (isOnline) void syncPendingReviews($apiKey);
+			if (isOnline && $apiKey) {
+				void syncPendingReviews($apiKey);
+				void syncPendingLessonStarts($apiKey);
+			}
 		};
 		const unsubscribeApiKey = apiKey.subscribe((token) => {
-			if (token && navigator.onLine) void syncPendingReviews(token);
+			if (token && navigator.onLine) {
+				void syncPendingReviews(token);
+				void syncPendingLessonStarts(token);
+			}
 		});
 		window.addEventListener('online', updateConnection);
 		window.addEventListener('offline', updateConnection);

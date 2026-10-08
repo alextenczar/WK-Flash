@@ -554,13 +554,15 @@ export async function getSubjectBySlug(
 export async function getLessonQueue(apiToken: string): Promise<LessonCard[]> {
 	const user = await getUser(apiToken);
 	const maxAccessibleLevel = Math.min(user.level, user.subscription.max_level_granted);
-	const types = 'radical,kanji,vocabulary,kana_vocabulary';
 	const assignments = await wkFetchAllPages<WKAssignment>(
-		`/assignments?subject_types=${types}&levels=${accessibleLevels(maxAccessibleLevel)}`,
+		`/assignments?immediately_available_for_lessons=true&levels=${accessibleLevels(maxAccessibleLevel)}`,
 		apiToken
 	);
 	const lessonAssignments = assignments.filter(
-		(assignment) => assignment.data.started_at == null && assignment.data.hidden !== true
+		(assignment) =>
+			assignment.data.started_at == null &&
+			assignment.data.hidden !== true &&
+			(assignment.data.srs_stage ?? 0) === 0
 	);
 	const subjects = await getSubjectsByIds(
 		apiToken,
@@ -800,4 +802,36 @@ export async function submitReview(
 		endingSrsStage:
 			response?.resources_updated?.assignment?.data?.srs_stage ?? response?.data?.ending_srs_stage ?? null
 	};
+}
+
+/** Marks a lesson complete and moves the assignment into WaniKani reviews. */
+export async function startAssignment(apiToken: string, assignmentId: number): Promise<void> {
+	const res = await wkFetchResponse(`${BASE_URL}/assignments/${assignmentId}/start`, {
+		method: 'PUT',
+		headers: {
+			Authorization: `Bearer ${apiToken}`,
+			'Wanikani-Revision': '20170710',
+			'Content-Type': 'application/json; charset=utf-8'
+		},
+		body: JSON.stringify({ assignment: {} })
+	});
+	if (res.ok) {
+		await invalidateCachedJLPTAssignments();
+		return;
+	}
+	if (res.status === 401) throw new WaniKaniError('Invalid API key.', 401);
+	if (res.status === 429) throw new WaniKaniError('WaniKani rate limit reached. Please try again shortly.', 429);
+	if (res.status === 422) {
+		try {
+			const assignment = await getAssignment(apiToken, assignmentId);
+			if (assignment.data.started_at) {
+				await invalidateCachedJLPTAssignments();
+				return;
+			}
+		} catch {
+			// Fall through to the original start error.
+		}
+	}
+	const body = await res.text();
+	throw new WaniKaniError(`Failed to start lesson (${res.status}): ${body}`, res.status);
 }
