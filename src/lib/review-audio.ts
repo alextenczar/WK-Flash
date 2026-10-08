@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import { writable } from 'svelte/store';
+import { onPersistentHydrate, readPersistent, writePersistent } from '$lib/persistent-storage';
 
 const STORAGE_KEY = 'wk-flash:audio-settings';
 const defaults: ReviewAudioSettings = { autoplayAfterAnswer: false, volume: 0.7 };
@@ -12,7 +13,7 @@ export interface ReviewAudioSettings {
 function loadSettings(): ReviewAudioSettings {
 	if (!browser) return defaults;
 	try {
-		const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as Partial<ReviewAudioSettings> | null;
+		const stored = JSON.parse(readPersistent(STORAGE_KEY) ?? 'null') as Partial<ReviewAudioSettings> | null;
 		if (!stored) return defaults;
 		return {
 			autoplayAfterAnswer:
@@ -30,6 +31,7 @@ function loadSettings(): ReviewAudioSettings {
 }
 
 const store = writable<ReviewAudioSettings>(loadSettings());
+onPersistentHydrate(() => store.set(loadSettings()));
 
 export const reviewAudioSettings = {
 	subscribe: store.subscribe,
@@ -46,12 +48,6 @@ export const reviewAudioSettings = {
 			};
 			return next;
 		});
-		if (browser) {
-			try {
-				localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-			} catch {
-				// Audio settings remain usable for this page session when storage is unavailable.
-			}
-		}
+		if (browser) writePersistent(STORAGE_KEY, JSON.stringify(next));
 	}
 };

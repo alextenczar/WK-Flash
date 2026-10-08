@@ -88,7 +88,7 @@
 			>WaniKani account settings</a
 		>. It only needs the default read/write review scopes.
 	</p>
-	<p class="muted">The key is stored only in this browser's local storage and never sent anywhere but WaniKani's API.</p>
+	<p class="muted">The key is stored only in this browser and never sent anywhere but WaniKani's API.</p>
 
 	<form onsubmit={(e) => { e.preventDefault(); save(); }}>
 		<label for="api-key">API key</label>

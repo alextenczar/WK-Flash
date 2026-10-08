@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
+	import { whenPersistentStorageReady } from '$lib/persistent-storage';
 	import { keybindings } from '$lib/keybindings';
 	import {
 		prioritizeCurrentLevel,
@@ -336,15 +337,18 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	}
 
 	onMount(() => {
-		if (!$apiKey) {
-			goto('/settings');
-			return;
-		}
-		if (restoreReviewSession()) {
-			void addNewDueReviews();
-		} else {
-			load();
-		}
+		void (async () => {
+			await whenPersistentStorageReady();
+			if (!$apiKey) {
+				goto('/settings');
+				return;
+			}
+			if (restoreReviewSession()) {
+				void addNewDueReviews();
+			} else {
+				load();
+			}
+		})();
 	});
 
 	function onPageHide() {

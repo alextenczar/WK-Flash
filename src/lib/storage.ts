@@ -1,21 +1,24 @@
 import { writable } from 'svelte/store';
-import { readLocalStorage, removeLocalStorage, writeLocalStorage } from '$lib/safe-storage';
+import { onPersistentHydrate, readPersistent, removePersistent, writePersistent } from '$lib/persistent-storage';
 
 const STORAGE_KEY = 'wk-flash:api-key';
 
 function createApiKeyStore() {
-	const initial = readLocalStorage(STORAGE_KEY) ?? '';
-	const { subscribe, set } = writable<string>(initial);
+	const { subscribe, set } = writable<string>(readPersistent(STORAGE_KEY) ?? '');
+
+	onPersistentHydrate(() => {
+		set(readPersistent(STORAGE_KEY) ?? '');
+	});
 
 	return {
 		subscribe,
 		set(value: string) {
-			if (value) writeLocalStorage(STORAGE_KEY, value);
-			else removeLocalStorage(STORAGE_KEY);
+			if (value) writePersistent(STORAGE_KEY, value);
+			else removePersistent(STORAGE_KEY);
 			set(value);
 		},
 		clear() {
-			removeLocalStorage(STORAGE_KEY);
+			removePersistent(STORAGE_KEY);
 			set('');
 		}
 	};

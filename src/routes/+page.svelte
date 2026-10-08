@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
+	import { readPersistent, writePersistent, whenPersistentStorageReady } from '$lib/persistent-storage';
 	import { hasSavedReviewSession } from '$lib/review-session';
 	import { pendingReviews } from '$lib/review-outbox';
 	import {
@@ -67,11 +68,7 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 			? serverReviewCount
 			: availableCards.length;
 		hasCachedReviewQueue = availableCards.length > 0;
-		try {
-			localStorage.setItem(REVIEW_COUNT_KEY, String(reviewCount));
-		} catch {
-			// The live count remains available if local storage is disabled.
-		}
+		writePersistent(REVIEW_COUNT_KEY, String(reviewCount));
 	}
 
 	async function load(forceRefresh = false) {
@@ -155,15 +152,12 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 		}, 1000);
 		window.addEventListener('online', handleOnline);
 		void (async () => {
+			await whenPersistentStorageReady();
 			hasSavedReview = hasSavedReviewSession();
-			try {
-				const storedCount = localStorage.getItem(REVIEW_COUNT_KEY);
-				if (storedCount !== null) {
-					const cachedCount = Number(storedCount);
-					if (Number.isInteger(cachedCount) && cachedCount >= 0) reviewCount = cachedCount;
-				}
-			} catch {
-				// Continue loading the live count if local storage is disabled.
+			const storedCount = readPersistent(REVIEW_COUNT_KEY);
+			if (storedCount !== null) {
+				const cachedCount = Number(storedCount);
+				if (Number.isInteger(cachedCount) && cachedCount >= 0) reviewCount = cachedCount;
 			}
 			const cachedQueue = await getCachedReviewQueue();
 			nextReviewBatch = cachedQueue?.nextReviewBatch;

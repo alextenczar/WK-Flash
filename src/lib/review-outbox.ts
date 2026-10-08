@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import { get, writable } from 'svelte/store';
+import { onPersistentHydrate, readPersistent, removePersistent, writePersistent } from '$lib/persistent-storage';
 import {
 	getAssignment,
 	getImmediatelyAvailableReviewAssignments,
@@ -73,7 +74,7 @@ function isPendingReview(value: unknown): value is PendingReviewSubmission {
 function loadPendingReviews(): PendingReviewSubmission[] {
 	if (!browser) return [];
 	try {
-		const stored = localStorage.getItem(STORAGE_KEY);
+		const stored = readPersistent(STORAGE_KEY);
 		if (!stored) return [];
 		const parsed: unknown = JSON.parse(stored);
 		return Array.isArray(parsed) ? parsed.filter(isPendingReview) : [];
@@ -85,13 +86,16 @@ function loadPendingReviews(): PendingReviewSubmission[] {
 export const pendingReviews = writable<PendingReviewSubmission[]>(loadPendingReviews());
 
 if (browser) {
+	let persistWrites = true;
 	pendingReviews.subscribe((reviews) => {
-		try {
-			if (reviews.length) localStorage.setItem(STORAGE_KEY, JSON.stringify(reviews));
-			else localStorage.removeItem(STORAGE_KEY);
-		} catch {
-			// Keep queued submissions in memory if browser storage is unavailable.
-		}
+		if (!persistWrites) return;
+		if (reviews.length) writePersistent(STORAGE_KEY, JSON.stringify(reviews));
+		else removePersistent(STORAGE_KEY);
+	});
+	onPersistentHydrate(() => {
+		persistWrites = false;
+		pendingReviews.set(loadPendingReviews());
+		persistWrites = true;
 	});
 }
 

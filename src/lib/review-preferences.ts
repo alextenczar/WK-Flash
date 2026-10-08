@@ -1,73 +1,35 @@
 import { writable } from 'svelte/store';
-import { readLocalStorage, writeLocalStorage } from '$lib/safe-storage';
+import { onPersistentHydrate, readPersistent, writePersistent } from '$lib/persistent-storage';
 import type { ReviewCard } from '$lib/wanikani/types';
 
-const STORAGE_KEY = 'wk-flash:show-mnemonics';
-const initial = readLocalStorage(STORAGE_KEY) !== 'false';
-const store = writable(initial);
-const SHOW_SRS_CHANGES_KEY = 'wk-flash:show-srs-changes';
-const showSrsChangesStore = writable(readLocalStorage(SHOW_SRS_CHANGES_KEY) !== 'false');
-const SHOW_PARTS_OF_SPEECH_KEY = 'wk-flash:show-parts-of-speech';
-const showPartsOfSpeechStore = writable(readLocalStorage(SHOW_PARTS_OF_SPEECH_KEY) !== 'false');
-
-export const showMnemonics = {
-	subscribe: store.subscribe,
-	set(value: boolean) {
-		writeLocalStorage(STORAGE_KEY, String(value));
-		store.set(value);
+function persistentBoolean(key: string, defaultValue: boolean) {
+	function current(): boolean {
+		const stored = readPersistent(key);
+		if (stored === null) return defaultValue;
+		return defaultValue ? stored !== 'false' : stored === 'true';
 	}
-};
 
-export const showSrsChanges = {
-	subscribe: showSrsChangesStore.subscribe,
-	set(value: boolean) {
-		writeLocalStorage(SHOW_SRS_CHANGES_KEY, String(value));
-		showSrsChangesStore.set(value);
-	}
-};
+	const store = writable(current());
+	onPersistentHydrate(() => store.set(current()));
 
-export const showPartsOfSpeech = {
-	subscribe: showPartsOfSpeechStore.subscribe,
-	set(value: boolean) {
-		writeLocalStorage(SHOW_PARTS_OF_SPEECH_KEY, String(value));
-		showPartsOfSpeechStore.set(value);
-	}
-};
+	return {
+		subscribe: store.subscribe,
+		set(value: boolean) {
+			writePersistent(key, String(value));
+			store.set(value);
+		}
+	};
+}
 
-const SHOW_TIME_ESTIMATE_KEY = 'wk-flash:show-time-estimate';
-const showTimeEstimateStore = writable(readLocalStorage(SHOW_TIME_ESTIMATE_KEY) !== 'false');
-
-export const showTimeEstimate = {
-	subscribe: showTimeEstimateStore.subscribe,
-	set(value: boolean) {
-		writeLocalStorage(SHOW_TIME_ESTIMATE_KEY, String(value));
-		showTimeEstimateStore.set(value);
-	}
-};
-
-const SHOW_UNDO_BUTTON_KEY = 'wk-flash:show-undo-button';
-const showUndoButtonStore = writable(readLocalStorage(SHOW_UNDO_BUTTON_KEY) === 'true');
-
-export const showUndoButton = {
-	subscribe: showUndoButtonStore.subscribe,
-	set(value: boolean) {
-		writeLocalStorage(SHOW_UNDO_BUTTON_KEY, String(value));
-		showUndoButtonStore.set(value);
-	}
-};
-
-const INTERWEAVE_LOCAL_N1_REVIEWS_KEY = 'wk-flash:interweave-local-n1-reviews';
-const interweaveLocalN1ReviewsStore = writable(
-	readLocalStorage(INTERWEAVE_LOCAL_N1_REVIEWS_KEY) === 'true'
+export const showMnemonics = persistentBoolean('wk-flash:show-mnemonics', true);
+export const showSrsChanges = persistentBoolean('wk-flash:show-srs-changes', true);
+export const showPartsOfSpeech = persistentBoolean('wk-flash:show-parts-of-speech', true);
+export const showTimeEstimate = persistentBoolean('wk-flash:show-time-estimate', true);
+export const showUndoButton = persistentBoolean('wk-flash:show-undo-button', false);
+export const interweaveLocalN1Reviews = persistentBoolean(
+	'wk-flash:interweave-local-n1-reviews',
+	false
 );
-
-export const interweaveLocalN1Reviews = {
-	subscribe: interweaveLocalN1ReviewsStore.subscribe,
-	set(value: boolean) {
-		writeLocalStorage(INTERWEAVE_LOCAL_N1_REVIEWS_KEY, String(value));
-		interweaveLocalN1ReviewsStore.set(value);
-	}
-};
 
 export const reviewSortOptions = [
 	{ value: 'default', label: 'Default (WaniKani order)' },
@@ -82,30 +44,29 @@ export const reviewSortOptions = [
 export type ReviewSortOrder = (typeof reviewSortOptions)[number]['value'];
 
 const REVIEW_SORT_KEY = 'wk-flash:review-sort';
-const savedReviewSort = readLocalStorage(REVIEW_SORT_KEY);
-const initialReviewSort = reviewSortOptions.some((option) => option.value === savedReviewSort)
-	? (savedReviewSort as ReviewSortOrder)
-	: 'default';
-const reviewSortStore = writable<ReviewSortOrder>(initialReviewSort);
+
+function currentReviewSort(): ReviewSortOrder {
+	const savedReviewSort = readPersistent(REVIEW_SORT_KEY);
+	return reviewSortOptions.some((option) => option.value === savedReviewSort)
+		? (savedReviewSort as ReviewSortOrder)
+		: 'default';
+}
+
+const reviewSortStore = writable<ReviewSortOrder>(currentReviewSort());
+onPersistentHydrate(() => reviewSortStore.set(currentReviewSort()));
 
 export const reviewSort = {
 	subscribe: reviewSortStore.subscribe,
 	set(value: ReviewSortOrder) {
-		writeLocalStorage(REVIEW_SORT_KEY, value);
+		writePersistent(REVIEW_SORT_KEY, value);
 		reviewSortStore.set(value);
 	}
 };
 
-const PRIORITIZE_CURRENT_LEVEL_KEY = 'wk-flash:prioritize-current-level';
-const prioritizeCurrentLevelStore = writable(readLocalStorage(PRIORITIZE_CURRENT_LEVEL_KEY) === 'true');
-
-export const prioritizeCurrentLevel = {
-	subscribe: prioritizeCurrentLevelStore.subscribe,
-	set(value: boolean) {
-		writeLocalStorage(PRIORITIZE_CURRENT_LEVEL_KEY, String(value));
-		prioritizeCurrentLevelStore.set(value);
-	}
-};
+export const prioritizeCurrentLevel = persistentBoolean(
+	'wk-flash:prioritize-current-level',
+	false
+);
 
 export function sortReviewCards(
 	cards: ReviewCard[],

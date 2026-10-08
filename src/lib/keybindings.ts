@@ -1,6 +1,5 @@
-import { browser } from '$app/environment';
 import { writable } from 'svelte/store';
-import { readLocalStorage, writeLocalStorage } from '$lib/safe-storage';
+import { onPersistentHydrate, readPersistent, writePersistent } from '$lib/persistent-storage';
 
 const STORAGE_KEY = 'wk-flash:keybindings';
 
@@ -19,28 +18,29 @@ export const defaultKeybindings: Keybindings = {
 	wrong: 'a'
 };
 
-function createKeybindingsStore() {
-	let initial = defaultKeybindings;
-	if (browser) {
-		const stored = readLocalStorage(STORAGE_KEY);
-		if (stored) {
-			try {
-				const parsed: Partial<Keybindings> = JSON.parse(stored);
-				initial = {
-					flip: typeof parsed.flip === 'string' ? parsed.flip : defaultKeybindings.flip,
-					correct: typeof parsed.correct === 'string' ? parsed.correct : defaultKeybindings.correct,
-					wrong: typeof parsed.wrong === 'string' ? parsed.wrong : defaultKeybindings.wrong
-				};
-			} catch {
-				initial = defaultKeybindings;
-			}
-		}
+function parseKeybindings(stored: string | null): Keybindings {
+	if (!stored) return defaultKeybindings;
+	try {
+		const parsed: Partial<Keybindings> = JSON.parse(stored);
+		return {
+			flip: typeof parsed.flip === 'string' ? parsed.flip : defaultKeybindings.flip,
+			correct: typeof parsed.correct === 'string' ? parsed.correct : defaultKeybindings.correct,
+			wrong: typeof parsed.wrong === 'string' ? parsed.wrong : defaultKeybindings.wrong
+		};
+	} catch {
+		return defaultKeybindings;
 	}
+}
 
-	const { subscribe, set, update } = writable<Keybindings>(initial);
+function createKeybindingsStore() {
+	const { subscribe, set, update } = writable<Keybindings>(parseKeybindings(readPersistent(STORAGE_KEY)));
+
+	onPersistentHydrate(() => {
+		set(parseKeybindings(readPersistent(STORAGE_KEY)));
+	});
 
 	function persist(value: Keybindings) {
-		writeLocalStorage(STORAGE_KEY, JSON.stringify(value));
+		writePersistent(STORAGE_KEY, JSON.stringify(value));
 		set(value);
 	}
 

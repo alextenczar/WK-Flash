@@ -1,7 +1,7 @@
 import localN1Kanji from '$lib/data/local-n1-kanji.json';
 import jlptVocabulary from '$lib/data/jlpt-vocabulary.json';
 import verboseKanji from '$lib/data/kanji-verbose.json';
-import { readLocalStorage, writeLocalStorage } from '$lib/safe-storage';
+import { readPersistent, writePersistent } from '$lib/persistent-storage';
 import type { ReviewCard, WKSubject, WKSubjectData } from '$lib/wanikani/types';
 
 const STORAGE_KEY = 'wk-flash:local-n1-review-progress';
@@ -45,7 +45,7 @@ export interface LocalReviewCard extends ReviewCard {
 
 function readProgress(): Record<string, LocalReviewProgress> {
 	try {
-		const stored = readLocalStorage(STORAGE_KEY);
+		const stored = readPersistent(STORAGE_KEY);
 		if (!stored) return {};
 		const parsed = JSON.parse(stored) as Record<string, Partial<LocalReviewProgress>>;
 		return Object.fromEntries(
@@ -63,7 +63,7 @@ function readProgress(): Record<string, LocalReviewProgress> {
 }
 
 function writeProgress(progress: Record<string, LocalReviewProgress>): void {
-	writeLocalStorage(STORAGE_KEY, JSON.stringify(progress));
+	writePersistent(STORAGE_KEY, JSON.stringify(progress));
 }
 
 function normalizedReadings(value: string): string[] {

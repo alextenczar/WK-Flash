@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import '$lib/app.css';
+	import { initPersistentStorage } from '$lib/persistent-storage';
 	import { apiKey } from '$lib/storage';
 	import { pendingReviews, syncPendingReviews } from '$lib/review-outbox';
 
@@ -8,6 +9,7 @@
 	let isOnline = $state(true);
 
 	onMount(() => {
+		void initPersistentStorage();
 		const updateConnection = () => {
 			isOnline = navigator.onLine;
 			if (isOnline) void syncPendingReviews($apiKey);

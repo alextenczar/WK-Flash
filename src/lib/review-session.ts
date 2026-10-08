@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { readPersistent, removePersistent, writePersistent } from '$lib/persistent-storage';
 import type { ReviewCard } from '$lib/wanikani/types';
 import type { PendingReviewSubmission } from '$lib/review-outbox';
 import type { LocalReviewProgress } from '$lib/local-n1-reviews';
@@ -41,7 +42,7 @@ export interface ReviewSessionSnapshot {
 export function readReviewSession(): ReviewSessionSnapshot | null {
 	if (!browser) return null;
 	try {
-		const stored = localStorage.getItem(STORAGE_KEY);
+		const stored = readPersistent(STORAGE_KEY);
 		if (!stored) return null;
 		const session = JSON.parse(stored) as ReviewSessionSnapshot;
 		if (
@@ -63,28 +64,14 @@ export function readReviewSession(): ReviewSessionSnapshot | null {
 }
 
 export function hasSavedReviewSession(): boolean {
-	if (!browser) return false;
-	try {
-		return localStorage.getItem(STORAGE_KEY) !== null;
-	} catch {
-		return false;
-	}
+	return Boolean(readPersistent(STORAGE_KEY));
 }
 
 export function saveReviewSession(session: ReviewSessionSnapshot): void {
 	if (!browser) return;
-	try {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-	} catch {
-		// Storage may be unavailable or full; the in-memory review can still continue.
-	}
+	writePersistent(STORAGE_KEY, JSON.stringify(session));
 }
 
 export function clearReviewSession(): void {
-	if (!browser) return;
-	try {
-		localStorage.removeItem(STORAGE_KEY);
-	} catch {
-		// Storage may be unavailable in private browsing.
-	}
+	removePersistent(STORAGE_KEY);
 }
