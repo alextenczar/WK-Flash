@@ -20,6 +20,16 @@ export interface WKReading {
 	type?: string;
 }
 
+export interface WKAuxiliaryMeaning {
+	meaning: string;
+	type: 'whitelist' | 'blacklist';
+}
+
+export interface WKAuxiliaryReading {
+	reading: string;
+	type: 'whitelist' | 'blacklist';
+}
+
 export type SubjectType = 'radical' | 'kanji' | 'vocabulary' | 'kana_vocabulary';
 
 export interface WKSubjectData {
@@ -28,14 +38,19 @@ export interface WKSubjectData {
 	hidden_at?: string | null;
 	meanings: WKMeaning[];
 	readings?: WKReading[];
+	auxiliary_meanings?: WKAuxiliaryMeaning[];
+	auxiliary_readings?: WKAuxiliaryReading[];
 	meaning_mnemonic: string;
 	reading_mnemonic?: string;
+	meaning_hint?: string | null;
+	reading_hint?: string | null;
 	slug: string;
 	document_url: string;
 	character_images?: { url: string; content_type: string }[];
 	pronunciation_audios?: { url: string; content_type: string }[];
 	visually_similar_subject_ids?: number[];
 	amalgamation_subject_ids?: number[];
+	component_subject_ids?: number[];
 	context_sentences?: { ja: string; en: string }[];
 	parts_of_speech?: string[];
 }
@@ -89,6 +104,9 @@ export interface WKLevelProgression {
 /** A single combined meaning+reading flashcard built from an assignment + its subject. */
 export interface ReviewCard {
 	assignmentId: number;
+	/** Local cards are stored and scheduled on-device only; all others are WaniKani reviews. */
+	origin?: 'wanikani' | 'local';
+	localId?: string;
 	availableAt?: string | null;
 	srsStage?: number;
 	maxAccessibleLevel?: number;

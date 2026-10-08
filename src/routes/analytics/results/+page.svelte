@@ -17,11 +17,13 @@
 		expression: string;
 		reading: string;
 		meaning: string;
+		subjectId: number | null;
 		levels: JLPTLevel[];
 		wanikaniLevel: number | null;
 		status: 'Learned' | 'In progress' | 'Not started' | 'Not available';
 		statusClass: 'learned' | 'in-progress' | 'not-started' | 'unavailable';
 		detail: string;
+		hasMissingN1Kanji: boolean;
 	};
 
 	const levels: JLPTLevel[] = ['N5', 'N4', 'N3', 'N2', 'N1'];
@@ -37,6 +39,7 @@
 	const requestedLevel = page.url.searchParams.get('level') as JLPTLevel | null;
 	const selectedLevel: JLPTLevel = requestedLevel && levels.includes(requestedLevel) ? requestedLevel : 'N5';
 	const isAllLevels = $derived(Boolean(page.url.searchParams.get('q')?.trim()) || page.url.searchParams.get('scope') === 'all');
+	const showMissingOnly = $derived(page.url.searchParams.get('missing') === '1');
 	let search = $state(page.url.searchParams.get('q') ?? '');
 	let progress = $state<{ kanji: JLPTProgressData; vocabulary: JLPTProgressData } | null>(null);
 	let loading = $state(true);
@@ -102,11 +105,13 @@
 					expression: character,
 					reading: '',
 					meaning: subject?.data.meanings.find((item) => item.primary)?.meaning ?? '',
+					subjectId: subject?.id ?? null,
 					levels: kanjiLevelsByCharacter.get(character) ?? [],
 					wanikaniLevel: subject?.data.level ?? null,
 					status: learned ? 'Learned' : inProgress ? 'In progress' : subject ? 'Not started' : 'Not available',
 					statusClass: learned ? 'learned' : inProgress ? 'in-progress' : subject ? 'not-started' : 'unavailable',
-					detail: stage === undefined ? '—' : `SRS ${stage}`
+					detail: stage === undefined ? '—' : `SRS ${stage}`,
+					hasMissingN1Kanji: subject === undefined && kanjiLevelsByCharacter.get(character)?.includes('N1') === true
 				};
 				});
 		}
@@ -131,22 +136,28 @@
 					expression: entry.expression,
 					reading: entry.reading,
 					meaning: entry.meaning,
+					subjectId: subject?.id ?? null,
 					levels: entry.levels,
 					wanikaniLevel: subject?.data.level ?? null,
 					status: learned ? 'Learned' : inProgress ? 'In progress' : subject ? 'Not started' : 'Not available',
 					statusClass: learned ? 'learned' : inProgress ? 'in-progress' : subject ? 'not-started' : 'unavailable',
-					detail: stage === undefined ? '—' : `SRS ${stage}`
+					detail: stage === undefined ? '—' : `SRS ${stage}`,
+					hasMissingN1Kanji: Array.from(entry.expression).some(
+						(character) =>
+							kanjiLevelsByCharacter.get(character)?.includes('N1') === true &&
+							!subjectsByCharacter.has(character)
+					)
 				};
 			});
 	});
 	const visibleRows = $derived.by(() => {
 		const normalizedSearch = search.trim().normalize('NFKC').toLocaleLowerCase();
-		if (!normalizedSearch) return allRows;
-		return allRows.filter((row) =>
+		const searchedRows = !normalizedSearch ? allRows : allRows.filter((row) =>
 			[row.expression, row.reading, row.meaning].some((value) =>
 				value.normalize('NFKC').toLocaleLowerCase().includes(normalizedSearch)
 			)
 		);
+		return showMissingOnly ? searchedRows.filter((row) => row.hasMissingN1Kanji) : searchedRows;
 	});
 
 	function updateSearch(value: string) {
@@ -155,6 +166,13 @@
 		if (value) url.searchParams.set('q', value);
 		else url.searchParams.delete('q');
 		if (value.trim()) url.searchParams.set('scope', 'all');
+		void goto(url, { replaceState: true, keepFocus: true, noScroll: true });
+	}
+
+	function toggleMissingFilter() {
+		const url = new URL(page.url);
+		if (showMissingOnly) url.searchParams.delete('missing');
+		else url.searchParams.set('missing', '1');
 		void goto(url, { replaceState: true, keepFocus: true, noScroll: true });
 	}
 
@@ -205,6 +223,15 @@
 			disabled={!progress}
 		/>
 	</label>
+	{#if selectedLevel === 'N1' && !isAllLevels}
+		<button class="missing-filter" type="button" aria-pressed={showMissingOnly} onclick={toggleMissingFilter}>
+			{showMissingOnly
+				? 'Show all N1 results'
+				: resultType === 'kanji'
+					? 'Show non-WaniKani N1 kanji'
+					: 'Show N1 vocabulary with non-WaniKani kanji'}
+		</button>
+	{/if}
 
 	<p class="result-count">
 		{#if isAllLevels}
@@ -229,10 +256,23 @@
 			</li>
 			{#each visibleRows as row (row.key)}
 				<li>
-					<span class:character={resultType === 'kanji'} class:vocabulary-expression={resultType === 'vocabulary'} lang="ja">
-						{row.expression}
-						{#if row.reading}<small>{row.reading}</small>{/if}
-					</span>
+					{#if row.subjectId || row.hasMissingN1Kanji}
+						<a
+							class="item-link"
+							class:character={resultType === 'kanji'}
+							class:vocabulary-expression={resultType === 'vocabulary'}
+							lang="ja"
+							href={`/${resultType === 'kanji' ? 'kanji' : 'vocab'}/${encodeURIComponent(row.expression)}?from=analytics${resultType === 'vocabulary' && row.reading ? `&reading=${encodeURIComponent(row.reading)}` : ''}`}
+						>
+							{row.expression}
+							{#if row.reading}<small>{row.reading}</small>{/if}
+						</a>
+					{:else}
+						<span class:character={resultType === 'kanji'} class:vocabulary-expression={resultType === 'vocabulary'} lang="ja">
+							{row.expression}
+							{#if row.reading}<small>{row.reading}</small>{/if}
+						</span>
+					{/if}
 					<span class="jlpt-level">{row.levels.join(', ')}</span>
 					<span class="wk-level">{row.wanikaniLevel === null ? '—' : row.wanikaniLevel}</span>
 					<span class="meaning">{row.meaning || ' '}</span>
@@ -248,6 +288,17 @@
 </div>
 
 <style>
+	.item-link {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.item-link:hover,
+	.item-link:focus-visible {
+		color: var(--accent);
+		text-decoration: underline;
+	}
+
 	.page-heading {
 		display: flex;
 		align-items: center;
@@ -281,6 +332,16 @@
 	.results-search input:focus {
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
+	}
+
+	.missing-filter {
+		margin-top: 0.75rem;
+		font-size: 0.875rem;
+	}
+
+	.missing-filter[aria-pressed='true'] {
+		border-color: var(--accent);
+		background: var(--surface);
 	}
 
 	.result-count {

@@ -56,6 +56,19 @@ export const showUndoButton = {
 	}
 };
 
+const INTERWEAVE_LOCAL_N1_REVIEWS_KEY = 'wk-flash:interweave-local-n1-reviews';
+const interweaveLocalN1ReviewsStore = writable(
+	readLocalStorage(INTERWEAVE_LOCAL_N1_REVIEWS_KEY) === 'true'
+);
+
+export const interweaveLocalN1Reviews = {
+	subscribe: interweaveLocalN1ReviewsStore.subscribe,
+	set(value: boolean) {
+		writeLocalStorage(INTERWEAVE_LOCAL_N1_REVIEWS_KEY, String(value));
+		interweaveLocalN1ReviewsStore.set(value);
+	}
+};
+
 export const reviewSortOptions = [
 	{ value: 'default', label: 'Default (WaniKani order)' },
 	{ value: 'srs-ascending', label: 'SRS stage (ascending)' },

@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import type { ReviewCard, WKAssignment, WKLevelProgression, WKReviewStatistic, WKSubject, WKUser } from './types';
+import { calculateDailyReviewActivity, type DailyReviewActivity } from './daily-review-activity';
 
 const BASE_URL = 'https://api.wanikani.com/v2';
 const SUBJECT_CACHE_NAME = 'wk-flash-wanikani-subjects-v1';
@@ -23,6 +24,12 @@ interface CachedJLPTProgressData {
 export interface NextReviewBatch {
 	availableAt: string;
 	count: number;
+	subjectIds: number[];
+}
+
+export interface LessonCard {
+	assignmentId: number;
+	subject: WKSubject;
 }
 
 export interface CachedReviewQueue {
@@ -30,6 +37,8 @@ export interface CachedReviewQueue {
 	cards: ReviewCard[];
 	reviewCount?: number;
 	nextReviewBatch?: NextReviewBatch | null;
+	upcomingReviewBatches?: NextReviewBatch[];
+	dailyReviewActivity?: DailyReviewActivity | null;
 	user: WKUser;
 }
 
@@ -179,7 +188,22 @@ export async function getCachedReviewQueue(): Promise<CachedReviewQueue | null> 
 				(typeof snapshot.nextReviewBatch.availableAt !== 'string' ||
 					!Number.isFinite(Date.parse(snapshot.nextReviewBatch.availableAt)) ||
 					!Number.isInteger(snapshot.nextReviewBatch.count) ||
-					snapshot.nextReviewBatch.count < 0))
+					snapshot.nextReviewBatch.count < 0)) ||
+			(snapshot.upcomingReviewBatches !== undefined &&
+				(!Array.isArray(snapshot.upcomingReviewBatches) ||
+					!snapshot.upcomingReviewBatches.every(
+						(batch) =>
+							typeof batch?.availableAt === 'string' &&
+							Number.isFinite(Date.parse(batch.availableAt)) &&
+							Number.isInteger(batch.count) &&
+						batch.count >= 0 &&
+						Array.isArray(batch.subjectIds) &&
+						batch.subjectIds.every((id) => Number.isInteger(id) && id > 0)
+					))) ||
+			(snapshot.dailyReviewActivity !== undefined &&
+				snapshot.dailyReviewActivity !== null &&
+				(!Number.isInteger(snapshot.dailyReviewActivity.count) ||
+					snapshot.dailyReviewActivity.count < 0))
 		) {
 			return null;
 		}
@@ -203,13 +227,25 @@ async function cacheReviewQueue(
 	cards: ReviewCard[],
 	user: WKUser,
 	reviewCount: number,
-	nextReviewBatch?: NextReviewBatch | null
+	nextReviewBatch?: NextReviewBatch | null,
+	dailyReviewActivity?: DailyReviewActivity | null,
+	upcomingReviewBatches?: NextReviewBatch[]
 ): Promise<void> {
 	const cache = await openSubjectCache();
 	if (!cache) return;
 	try {
-		const previous = nextReviewBatch === undefined ? await getCachedReviewQueue() : null;
+		const previous = nextReviewBatch === undefined ||
+			dailyReviewActivity === undefined ||
+			upcomingReviewBatches === undefined
+			? await getCachedReviewQueue()
+			: null;
 		const cachedNextReviewBatch = nextReviewBatch === undefined ? previous?.nextReviewBatch : nextReviewBatch;
+		const cachedDailyReviewActivity = dailyReviewActivity === undefined
+			? previous?.dailyReviewActivity
+			: dailyReviewActivity;
+		const cachedUpcomingReviewBatches = upcomingReviewBatches === undefined
+			? previous?.upcomingReviewBatches
+			: upcomingReviewBatches;
 		await cache.put(
 			reviewQueueCacheRequest(),
 			new Response(JSON.stringify({
@@ -217,7 +253,11 @@ async function cacheReviewQueue(
 				cards,
 				reviewCount,
 				user,
-				...(cachedNextReviewBatch !== undefined ? { nextReviewBatch: cachedNextReviewBatch } : {})
+				...(cachedNextReviewBatch !== undefined ? { nextReviewBatch: cachedNextReviewBatch } : {}),
+				...(cachedDailyReviewActivity !== undefined ? { dailyReviewActivity: cachedDailyReviewActivity } : {}),
+				...(cachedUpcomingReviewBatches !== undefined
+					? { upcomingReviewBatches: cachedUpcomingReviewBatches }
+					: {})
 			} satisfies CachedReviewQueue), {
 				headers: { 'Content-Type': 'application/json' }
 			})
@@ -496,6 +536,52 @@ export async function getSubjectsByIds(
 	});
 }
 
+/** Loads an individual subject using WaniKani's human-readable subject slug. */
+export async function getSubjectBySlug(
+	apiToken: string,
+	slug: string,
+	types?: string
+): Promise<WKSubject | null> {
+	const typeFilter = types ? `&types=${encodeURIComponent(types)}` : '';
+	const subjects = await wkFetchAllPages<WKSubject>(
+		`/subjects?slugs=${encodeURIComponent(slug)}${typeFilter}`,
+		apiToken
+	);
+	return subjects[0] ?? null;
+}
+
+/** Loads unlocked WaniKani subjects that have not been started yet. */
+export async function getLessonQueue(apiToken: string): Promise<LessonCard[]> {
+	const user = await getUser(apiToken);
+	const maxAccessibleLevel = Math.min(user.level, user.subscription.max_level_granted);
+	const types = 'radical,kanji,vocabulary,kana_vocabulary';
+	const assignments = await wkFetchAllPages<WKAssignment>(
+		`/assignments?subject_types=${types}&levels=${accessibleLevels(maxAccessibleLevel)}`,
+		apiToken
+	);
+	const lessonAssignments = assignments.filter(
+		(assignment) => assignment.data.started_at == null && assignment.data.hidden !== true
+	);
+	const subjects = await getSubjectsByIds(
+		apiToken,
+		lessonAssignments.map((assignment) => assignment.data.subject_id),
+		maxAccessibleLevel
+	);
+	const subjectById = new Map(subjects.map((subject) => [subject.id, subject]));
+
+	return lessonAssignments
+		.filter((assignment) => subjectById.has(assignment.data.subject_id))
+		.sort((left, right) => {
+			const leftSubject = subjectById.get(left.data.subject_id);
+			const rightSubject = subjectById.get(right.data.subject_id);
+			return (leftSubject?.data.level ?? 0) - (rightSubject?.data.level ?? 0) || left.id - right.id;
+		})
+		.map((assignment) => ({
+			assignmentId: assignment.id,
+			subject: subjectById.get(assignment.data.subject_id)!
+		}));
+}
+
 async function getAccessibleAssignments(apiToken: string): Promise<{
 	user: WKUser;
 	assignments: WKAssignment[];
@@ -557,19 +643,24 @@ export async function getReviewOverview(apiToken: string): Promise<{
 	reviewCount: number;
 	cards: ReviewCard[];
 	nextReviewBatch: NextReviewBatch | null | undefined;
+	upcomingReviewBatches: NextReviewBatch[] | undefined;
+	dailyReviewActivity: DailyReviewActivity | null;
 	currentLevelKanji: {
+		id: number;
 		character: string;
 		srsStage: number | null;
 		availableAt: string | null;
 		passedAt: string | null;
 	}[] | null;
 }> {
-	const [reviewData, nextBatch] = await Promise.all([
+	const [reviewData, upcomingReviewBatches, dailyReviewActivity] = await Promise.all([
 		getAccessibleReviewData(apiToken),
-		getNextReviewBatch(apiToken)
+		getUpcomingReviewBatches(apiToken),
+		getTodayReviewActivity(apiToken)
 	]);
 	const { user, assignments, reviewCount, subjectById, maxAccessibleLevel } = reviewData;
 	let currentLevelKanji: {
+		id: number;
 		character: string;
 		srsStage: number | null;
 		availableAt: string | null;
@@ -587,6 +678,7 @@ export async function getReviewOverview(apiToken: string): Promise<{
 			.filter((subject) => subject.object === 'kanji' && subject.data.characters)
 			.sort((first, second) => first.id - second.id)
 			.map((subject) => ({
+				id: subject.id,
 				character: subject.data.characters!,
 				srsStage: assignmentsBySubjectId.get(subject.id)?.data.srs_stage ?? null,
 				availableAt: assignmentsBySubjectId.get(subject.id)?.data.available_at ?? null,
@@ -595,26 +687,67 @@ export async function getReviewOverview(apiToken: string): Promise<{
 	} catch {
 		// The home page can still show review information if this optional summary fails.
 	}
-	const nextReviewBatch = nextBatch === undefined
-		? (await getCachedReviewQueue())?.nextReviewBatch
-		: nextBatch;
+	const cachedQueue = upcomingReviewBatches === undefined ? await getCachedReviewQueue() : null;
+	const nextReviewBatch = upcomingReviewBatches === undefined
+		? cachedQueue?.nextReviewBatch
+		: upcomingReviewBatches[0] ?? null;
+	const cachedUpcomingReviewBatches = upcomingReviewBatches === undefined
+		? cachedQueue?.upcomingReviewBatches
+		: upcomingReviewBatches;
 	const cards = reviewCardsFromData(assignments, subjectById, maxAccessibleLevel, user.level);
-	await cacheReviewQueue(cards, user, reviewCount, nextReviewBatch);
-	return { user, reviewCount, cards, nextReviewBatch, currentLevelKanji };
+	await cacheReviewQueue(
+		cards,
+		user,
+		reviewCount,
+		nextReviewBatch,
+		dailyReviewActivity,
+		cachedUpcomingReviewBatches
+	);
+	return {
+		user,
+		reviewCount,
+		cards,
+		nextReviewBatch,
+		upcomingReviewBatches: cachedUpcomingReviewBatches,
+		dailyReviewActivity,
+		currentLevelKanji
+	};
 }
 
-async function getNextReviewBatch(apiToken: string): Promise<NextReviewBatch | null | undefined> {
+/** Counts today’s completed reviews using the same review-history fallback as Analytics. */
+export async function getTodayReviewActivity(apiToken: string): Promise<DailyReviewActivity | null> {
+	const updatedAfter = new Date();
+	updatedAfter.setHours(0, 0, 0, 0);
+	const filter = encodeURIComponent(updatedAfter.toISOString());
+	try {
+		const [assignments, reviewStatistics] = await Promise.all([
+			wkFetchAllPages<WKAssignment>(`/assignments?updated_after=${filter}`, apiToken).catch(() => []),
+			wkFetchAllPages<WKReviewStatistic>(`/review_statistics?updated_after=${filter}`, apiToken).catch(() => null)
+		]);
+		return calculateDailyReviewActivity(assignments, reviewStatistics);
+	} catch {
+		return null;
+	}
+}
+
+async function getUpcomingReviewBatches(apiToken: string): Promise<NextReviewBatch[] | undefined> {
 	try {
 		const summary = await wkFetch<{
 			data: { reviews: { available_at: string; subject_ids: number[] }[] };
 		}>('/summary', apiToken);
 		const now = Date.now();
-		const nextBatch = summary.data.reviews
-			.filter((batch) => batch.subject_ids.length > 0 && Date.parse(batch.available_at) > now)
-			.sort((left, right) => Date.parse(left.available_at) - Date.parse(right.available_at))[0];
-		return nextBatch
-			? { availableAt: nextBatch.available_at, count: nextBatch.subject_ids.length }
-			: null;
+		const nextDay = now + 24 * 60 * 60 * 1000;
+		return summary.data.reviews
+			.filter((batch) => {
+				const availableAt = Date.parse(batch.available_at);
+				return batch.subject_ids.length > 0 && availableAt > now && availableAt <= nextDay;
+			})
+			.sort((left, right) => Date.parse(left.available_at) - Date.parse(right.available_at))
+			.map((batch) => ({
+				availableAt: batch.available_at,
+				count: batch.subject_ids.length,
+				subjectIds: batch.subject_ids
+			}));
 	} catch {
 		return undefined;
 	}

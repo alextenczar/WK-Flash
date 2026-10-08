@@ -44,6 +44,7 @@
 		<a href="/" class="brand">WK Flash</a>
 		<div class="links">
 			{#if $apiKey}
+				<a href="/lessons">Lessons</a>
 				<a href="/analytics">Analytics</a>
 			{/if}
 			<a href="/settings">Settings</a>

@@ -28,7 +28,7 @@
 			</li>
 			<li>
 				<h3>JLPT progress analytics</h3>
-				<p>Track kanji and vocabulary by JLPT level, see learned status and WaniKani availability, and search level-specific or cross-level results.</p>
+				<p>Track kanji and vocabulary by JLPT level, search level-specific or cross-level results, explore an SRS heatmap, and compare JLPT curriculum coverage across WaniKani levels.</p>
 			</li>
 			<li>
 				<h3>Related item details</h3>
@@ -44,7 +44,11 @@
 			</li>
 			<li>
 				<h3>SRS feedback and review planning</h3>
-				<p>See SRS stage changes after answers, review counts due, and the next scheduled review batch.</p>
+				<p>See SRS stage changes after answers, review counts due and completed today, a 24-hour review timeline, and the exact items in each upcoming WaniKani batch.</p>
+			</li>
+			<li>
+				<h3>Optional local N1 review track</h3>
+				<p>Interweave an opt-in set of supplemental N1 kanji and related vocabulary into reviews. These cards are scheduled only on your device and are never submitted to WaniKani.</p>
 			</li>
 		</ul>
 	</section>

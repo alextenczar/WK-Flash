@@ -5,6 +5,7 @@
 	import { keybindings } from '$lib/keybindings';
 	import {
 		prioritizeCurrentLevel,
+		interweaveLocalN1Reviews,
 		reviewSort,
 		showMnemonics,
 		showPartsOfSpeech,
@@ -27,6 +28,13 @@
 		REVIEW_QUEUE_FRESH_MS,
 		WaniKaniError
 	} from '$lib/wanikani/api';
+	import {
+		applyLocalCorrectAnswer,
+		buildLocalN1ReviewCards,
+		isLocalReviewCard,
+		restoreLocalReviewProgress,
+		selectPacedLocalCards
+	} from '$lib/local-n1-reviews';
 	import { allMeanings, primaryMeaning, readingsForDisplay, vocabularyByReading } from '$lib/wanikani/matching';
 	import {
 		formatSrsStageUpdate,
@@ -111,6 +119,7 @@
 
 	async function toggleMoreInfo() {
 		if (!current) return;
+		if (isLocalReviewCard(current)) return;
 		moreInfoOpen = !moreInfoOpen;
 		if (!moreInfoOpen || moreInfoLoadedFor === current.subject.id || moreInfoLoading) return;
 
@@ -223,22 +232,44 @@ function addCachedUserLevel(cards: ReviewCard[], userLevel: number): ReviewCard[
 	);
 }
 
+function interleaveLocalCards(waniKaniCards: ReviewCard[], localCards: ReviewCard[]): ReviewCard[] {
+	if (localCards.length === 0) return waniKaniCards;
+	const result = [...waniKaniCards];
+	for (const [index, card] of localCards.entries()) {
+		const position = Math.min(
+			result.length,
+			Math.max(1, Math.floor(((index + 1) * (waniKaniCards.length + 1)) / (localCards.length + 1)))
+		);
+		result.splice(position, 0, card);
+	}
+	return result;
+}
+
+async function prepareReviewQueue(waniKaniCards: ReviewCard[]): Promise<ReviewCard[]> {
+	const sortedWaniKaniCards = sortReviewCards(waniKaniCards, $reviewSort, $prioritizeCurrentLevel);
+	if (!$interweaveLocalN1Reviews || sortedWaniKaniCards.length === 0) {
+		return sortedWaniKaniCards;
+	}
+	const localCards = selectPacedLocalCards(buildLocalN1ReviewCards(), sortedWaniKaniCards.length);
+	return interleaveLocalCards(sortedWaniKaniCards, localCards);
+}
+
 async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	const cachedQueue = await getCachedReviewQueue();
 	const cachedCards = cachedQueue
 		? addCachedUserLevel(withoutQueuedSubmissions(cachedQueue.cards), cachedQueue.user.level)
 		: null;
 	if (!navigator.onLine) {
-		if (cachedCards) return cachedCards;
+		if (cachedCards) return prepareReviewQueue(cachedCards);
 		throw new WaniKaniError('No offline review queue is saved on this device. Connect once to preload reviews.', 0);
 	}
 	if (cachedQueue && Date.now() - cachedQueue.fetchedAt < REVIEW_QUEUE_FRESH_MS) {
-		return cachedCards ?? [];
+		return prepareReviewQueue(cachedCards ?? []);
 	}
 	try {
-		return withoutQueuedSubmissions(await buildReviewQueue($apiKey));
+		return prepareReviewQueue(withoutQueuedSubmissions(await buildReviewQueue($apiKey)));
 	} catch (e) {
-		if (cachedCards) return cachedCards;
+		if (cachedCards) return prepareReviewQueue(cachedCards);
 		throw e;
 	}
 }
@@ -248,7 +279,9 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		try {
 			const availableCards = await getAvailableReviewQueue();
 			if (wrapUp || phase !== 'question') return;
-			const newCards = availableCards.filter((card) => !knownAssignmentIds.has(card.assignmentId));
+			const newCards = availableCards.filter(
+				(card) => !isLocalReviewCard(card) && !knownAssignmentIds.has(card.assignmentId)
+			);
 			if (newCards.length === 0) return;
 
 			queue = [...queue, ...sortReviewCards(newCards, $reviewSort, $prioritizeCurrentLevel)];
@@ -278,7 +311,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				clearReviewSession();
 				return;
 			}
-			queue = sortReviewCards(cards, $reviewSort, $prioritizeCurrentLevel);
+			queue = cards;
 			totalUnique = queue.length;
 			knownAssignmentIds = new Set(queue.map((card) => card.assignmentId));
 			pendingIds = new Set(queue.map((c) => c.assignmentId));
@@ -392,7 +425,14 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		responseTimeTotalMs = undoSnapshot.responseTimeTotalMs;
 		responseTimeSamples = undoSnapshot.responseTimeSamples;
 		wrongAnswerCount = undoSnapshot.wrongAnswerCount;
-		flipped = undoSnapshot.flipped;
+		// Return to the front of the restored card so it can be reviewed again from scratch.
+		flipped = false;
+		if (undoSnapshot.localProgressBefore) {
+			restoreLocalReviewProgress(
+				undoSnapshot.localProgressBefore.localId,
+				undoSnapshot.localProgressBefore.progress
+			);
+		}
 		undoSnapshot = null;
 		pendingReviewSubmission = null;
 		questionStartedAt = performance.now();
@@ -452,26 +492,33 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			remaining.delete(card.assignmentId);
 			pendingIds = remaining;
 			completedCount = totalUnique - pendingIds.size;
-			const reviewSubmission = {
-				assignmentId: card.assignmentId,
-				availableAt: card.availableAt,
-				incorrectCount: card.incorrectCount,
-				needsReading: card.needsReading,
-				startingSrsStage: card.srsStage,
-				subjectLabel: card.subject.data.characters ?? card.subject.data.slug
-			};
-			if ($showSrsChanges && card.srsStage !== undefined) {
-				recordSrsStageUpdate({
-					subjectLabel: reviewSubmission.subjectLabel,
-					startingStage: card.srsStage,
-					endingStage: predictSrsStage(card.srsStage, card.incorrectCount)
-				});
-			}
-			if ($showUndoButton) {
-				queueReviewSubmission(reviewSubmission);
-				pendingReviewSubmission = reviewSubmission;
+			if (isLocalReviewCard(card)) {
+				const previous = applyLocalCorrectAnswer(card.localId);
+				if (undoSnapshot) {
+					undoSnapshot.localProgressBefore = { localId: card.localId, progress: previous };
+				}
 			} else {
-				void submitReview(reviewSubmission);
+				const reviewSubmission = {
+					assignmentId: card.assignmentId,
+					availableAt: card.availableAt,
+					incorrectCount: card.incorrectCount,
+					needsReading: card.needsReading,
+					startingSrsStage: card.srsStage,
+					subjectLabel: card.subject.data.characters ?? card.subject.data.slug
+				};
+				if ($showSrsChanges && card.srsStage !== undefined) {
+					recordSrsStageUpdate({
+						subjectLabel: reviewSubmission.subjectLabel,
+						startingStage: card.srsStage,
+						endingStage: predictSrsStage(card.srsStage, card.incorrectCount)
+					});
+				}
+				if ($showUndoButton) {
+					queueReviewSubmission(reviewSubmission);
+					pendingReviewSubmission = reviewSubmission;
+				} else {
+					void submitReview(reviewSubmission);
+				}
 			}
 		} else {
 			// Send the card back into the deck a few cards later, Anki-style.
@@ -589,7 +636,9 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 					{current.subject.data.slug}
 				{/if}
 			</div>
-			<p class="subject-type">{current.subject.object.replace('_', ' ')}</p>
+			<p class="subject-type">
+				{isLocalReviewCard(current) ? 'Local JLPT N1 · ' : ''}{current.subject.object.replace('_', ' ')}
+			</p>
 			<div class="card-actions">
 				{#if !flipped}
 					<button class="primary flip-button" onclick={flip}>
@@ -648,16 +697,18 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 						{/if}
 					</section>
 
-					<button
-						class="more-info-toggle"
-						type="button"
-						aria-expanded={moreInfoOpen}
-						onclick={() => void toggleMoreInfo()}
-					>
-						{moreInfoOpen ? 'Hide more information' : 'More information'}
-					</button>
+					{#if !isLocalReviewCard(current)}
+						<button
+							class="more-info-toggle"
+							type="button"
+							aria-expanded={moreInfoOpen}
+							onclick={() => void toggleMoreInfo()}
+						>
+							{moreInfoOpen ? 'Hide more information' : 'More information'}
+						</button>
+					{/if}
 
-					{#if moreInfoOpen}
+					{#if !isLocalReviewCard(current) && moreInfoOpen}
 						<div class="more-info">
 							{#if moreInfoLoading}
 								<p class="muted">Loading related items...</p>

@@ -1,6 +1,7 @@
 import { browser } from '$app/environment';
 import type { ReviewCard } from '$lib/wanikani/types';
 import type { PendingReviewSubmission } from '$lib/review-outbox';
+import type { LocalReviewProgress } from '$lib/local-n1-reviews';
 
 const STORAGE_KEY = 'wk-flash:active-review';
 
@@ -15,6 +16,7 @@ export interface ReviewUndoSnapshot {
 	responseTimeSamples: number;
 	wrongAnswerCount: number;
 	flipped: boolean;
+	localProgressBefore?: { localId: string; progress: LocalReviewProgress | null };
 }
 
 export interface ReviewSessionSnapshot {

@@ -21,6 +21,7 @@
 	type VocabularyEntry = { expression: string; reading: string; meaning: string; levels: JLPTLevel[] };
 	type VocabularyRow = {
 		entry: VocabularyEntry;
+		subjectId: number | null;
 		status: 'Learned' | 'In progress' | 'Not started' | 'Not available';
 		statusClass: 'learned' | 'in-progress' | 'not-started' | 'unavailable';
 		srsStage: number | null;
@@ -28,6 +29,7 @@
 	};
 	type KanjiRow = {
 		character: string;
+		subjectId: number | null;
 		meaning: string;
 		subjectLevel: number | null;
 		status: 'Learned' | 'In progress' | 'Not started' | 'Not available';
@@ -157,15 +159,15 @@
 			const meaning = subject?.data.meanings.find((item) => item.primary)?.meaning ?? '';
 
 			if (!subject) {
-				return { character, meaning: '', subjectLevel: null, status: 'Not available', statusClass: 'unavailable', srsStage: null };
+				return { character, subjectId: null, meaning: '', subjectLevel: null, status: 'Not available', statusClass: 'unavailable', srsStage: null };
 			}
 			if (!assignment) {
-				return { character, meaning, subjectLevel: subject.data.level, status: 'Not started', statusClass: 'not-started', srsStage: null };
+				return { character, subjectId: subject.id, meaning, subjectLevel: subject.data.level, status: 'Not started', statusClass: 'not-started', srsStage: null };
 			}
 			if (assignment.data.srs_stage >= 5) {
-				return { character, meaning, subjectLevel: subject.data.level, status: 'Learned', statusClass: 'learned', srsStage: assignment.data.srs_stage };
+				return { character, subjectId: subject.id, meaning, subjectLevel: subject.data.level, status: 'Learned', statusClass: 'learned', srsStage: assignment.data.srs_stage };
 			}
-			return { character, meaning, subjectLevel: subject.data.level, status: 'In progress', statusClass: 'in-progress', srsStage: assignment.data.srs_stage };
+			return { character, subjectId: subject.id, meaning, subjectLevel: subject.data.level, status: 'In progress', statusClass: 'in-progress', srsStage: assignment.data.srs_stage };
 		})
 	);
 
@@ -192,6 +194,7 @@
 			const inProgress = stage !== null && stage > 0 && !learned;
 			return {
 				entry,
+				subjectId: subject?.id ?? null,
 				status: learned ? 'Learned' : inProgress ? 'In progress' : subject ? 'Not started' : 'Not available',
 				statusClass: learned ? 'learned' : inProgress ? 'in-progress' : subject ? 'not-started' : 'unavailable',
 				srsStage: stage,
@@ -270,6 +273,16 @@
 			Refresh
 		</button>
 	</div>
+	<nav class="analytics-tools" aria-label="Analytics views">
+		<a href="/analytics/kanji">
+			<strong>Kanji heatmap</strong>
+			<span>Explore every kanji by JLPT level, WaniKani level, or SRS stage.</span>
+		</a>
+		<a href="/analytics/coverage">
+			<strong>JLPT coverage</strong>
+			<span>See when each JLPT kanji set appears across WaniKani levels.</span>
+		</a>
+	</nav>
 
 	{#if error}
 		<p class="message" role="alert">
@@ -427,7 +440,11 @@
 						</li>
 						{#each displayedKanji as row (row.character)}
 							<li>
-								<span class="character" lang="ja">{row.character}</span>
+								{#if row.subjectId}
+									<a class="character item-link" lang="ja" href={`/kanji/${encodeURIComponent(row.character)}?from=analytics`}>{row.character}</a>
+								{:else}
+									<span class="character" lang="ja">{row.character}</span>
+								{/if}
 								<span class="meaning">{row.meaning || ' '}</span>
 								<span class="wk-level">{row.subjectLevel === null ? '—' : row.subjectLevel}</span>
 								<span class={`status status--${row.statusClass}`}>{row.status}</span>
@@ -517,7 +534,11 @@
 						</li>
 						{#each displayedVocabulary as row (`${row.entry.expression}-${row.entry.reading}`)}
 							<li>
-								<span class="vocabulary-expression" lang="ja">{row.entry.expression}<small>{row.entry.reading}</small></span>
+								{#if row.subjectId}
+									<a class="vocabulary-expression item-link" lang="ja" href={`/vocab/${encodeURIComponent(row.entry.expression)}?from=analytics`}>{row.entry.expression}<small>{row.entry.reading}</small></a>
+								{:else}
+									<span class="vocabulary-expression" lang="ja">{row.entry.expression}<small>{row.entry.reading}</small></span>
+								{/if}
 								<span class="meaning">{row.entry.meaning}</span>
 								<span class="wk-level">{row.subjectLevel === null ? '—' : row.subjectLevel}</span>
 								<span class={`status status--${row.statusClass}`}>{row.status}</span>
@@ -543,10 +564,50 @@
 </div>
 
 <style>
+	.item-link {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	.item-link:hover,
+	.item-link:focus-visible {
+		color: var(--accent);
+		text-decoration: underline;
+	}
+
 	.analytics-page {
 		display: flex;
 		flex-direction: column;
 		gap: 1.5rem;
+	}
+
+	.analytics-tools {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.75rem;
+	}
+
+	.analytics-tools a {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		padding: 1rem;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		background: var(--surface);
+		color: var(--text);
+		text-decoration: none;
+	}
+
+	.analytics-tools a:hover,
+	.analytics-tools a:focus-visible {
+		border-color: var(--accent);
+		text-decoration: none;
+	}
+
+	.analytics-tools span {
+		color: var(--muted);
+		font-size: 0.85rem;
 	}
 
 	.page-heading,
@@ -969,6 +1030,10 @@
 	}
 
 	@media (max-width: 560px) {
+		.analytics-tools {
+			grid-template-columns: 1fr;
+		}
+
 		.level-up-stats {
 			grid-template-columns: 1fr 1fr;
 		}

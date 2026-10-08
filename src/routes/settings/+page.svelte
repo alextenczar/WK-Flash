@@ -4,6 +4,7 @@
 	import { apiKey } from '$lib/storage';
 	import {
 		prioritizeCurrentLevel,
+		interweaveLocalN1Reviews,
 		reviewSort,
 		reviewSortOptions,
 		showMnemonics,
@@ -126,6 +127,17 @@
 			/>
 			Prioritize items from my current WaniKani level
 		</label>
+		<label class="toggle">
+			<input
+				type="checkbox"
+				checked={$interweaveLocalN1Reviews}
+				onchange={(event) => interweaveLocalN1Reviews.set(event.currentTarget.checked)}
+			/>
+			Interweave additional non-WaniKani N1 kanji and vocabulary into reviews
+		</label>
+		<p class="muted">
+			Local JLPT cards are stored and scheduled only on this device. They are never submitted to WaniKani.
+		</p>
 		<p class="muted">Current-level items come first; the selected sort applies within each group. New queues and newly due items use these settings; saved sessions keep their current order.</p>
 	</section>
 
@@ -177,7 +189,7 @@
 				checked={$reviewAudioSettings.autoplayAfterAnswer}
 				onchange={(event) => reviewAudioSettings.update({ autoplayAfterAnswer: event.currentTarget.checked })}
 			/>
-			Play pronunciation after answering
+			Play pronunciation after answering a review or revealing a lesson
 		</label>
 		<label class="volume-setting" for="audio-volume">
 			<span>Pronunciation volume</span>
