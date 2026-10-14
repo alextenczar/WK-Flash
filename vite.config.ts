@@ -20,7 +20,14 @@ export default defineConfig({
 				directives: {
 					'default-src': ['self'],
 					'base-uri': ['self'],
-					'connect-src': ['self', 'https://api.wanikani.com', 'ws:', 'wss:'],
+					'connect-src': [
+						'self',
+						'https://api.wanikani.com',
+						'https://va.vercel-scripts.com',
+						'https://vitals.vercel-insights.com',
+						'ws:',
+						'wss:'
+					],
 					'font-src': ['self', 'data:'],
 					'form-action': ['self'],
 					'frame-ancestors': ['none'],
@@ -28,7 +35,7 @@ export default defineConfig({
 					'manifest-src': ['self'],
 					'media-src': ['self', 'https://cdn.wanikani.com', 'https://files.wanikani.com'],
 					'object-src': ['none'],
-					'script-src': ['self'],
+					'script-src': ['self', 'https://va.vercel-scripts.com'],
 					'script-src-attr': ['none'],
 					'style-src': ['self', 'unsafe-inline'],
 					'worker-src': ['self']
