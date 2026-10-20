@@ -4,6 +4,7 @@
 	import {
 		gamepadBindings,
 		gamepadButtonLabel,
+		keyboardKeyLabel,
 		keybindings,
 		type Keybindings
 	} from '$lib/keybindings';
@@ -35,7 +36,9 @@
 	const keybindingActions: { key: keyof Keybindings; label: string; hint: string }[] = [
 		{ key: 'flip', label: 'Flip card', hint: 'Reveals the meaning and reading.' },
 		{ key: 'correct', label: 'Mark correct', hint: 'Only active once the card is flipped.' },
-		{ key: 'wrong', label: 'Mark wrong', hint: 'Only active once the card is flipped; requeues the card.' }
+		{ key: 'wrong', label: 'Mark wrong', hint: 'Only active once the card is flipped; requeues the card.' },
+		{ key: 'moreInfo', label: 'More information', hint: 'Shows related items. Only active once the card is flipped.' },
+		{ key: 'undo', label: 'Undo', hint: 'Returns to the previous question. Needs the undo button option turned on.' }
 	];
 
 	function isListening(kind: 'key' | 'pad', action: keyof Keybindings) {
@@ -272,7 +275,7 @@
 							onclick={() => toggleListening('key', action.key)}
 							onkeydown={(event) => isListening('key', action.key) && handleKeydown(event, action.key)}
 						>
-							{isListening('key', action.key) ? 'Press a key...' : $keybindings[action.key]}
+							{isListening('key', action.key) ? 'Press a key...' : keyboardKeyLabel($keybindings[action.key])}
 						</button>
 						<button
 							type="button"

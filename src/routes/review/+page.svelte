@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
 	import { whenPersistentStorageReady } from '$lib/persistent-storage';
-	import { gamepadBindings, gamepadButtonLabel, keybindings } from '$lib/keybindings';
+	import { gamepadBindings, gamepadButtonLabel, keybindings, type Keybindings } from '$lib/keybindings';
 	import { gamepadConnected, startGamepadPolling } from '$lib/gamepad';
 	import {
 		prioritizeCurrentLevel,
@@ -549,39 +549,53 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		}
 	}
 
-	function handleKeydown(e: KeyboardEvent) {
-		if (phase !== 'question' || !current) return;
-		const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+	type ReviewAction = keyof Keybindings;
+	const reviewActions: ReviewAction[] = ['flip', 'correct', 'wrong', 'moreInfo', 'undo'];
 
-		if (!flipped) {
-			if (key === $keybindings.flip) {
-				e.preventDefault();
+	/**
+	 * Runs a review action if it applies to the current state. Returns false when it does not,
+	 * so a shared binding (flip and correct both use "d") can fall through to the next action.
+	 */
+	function runReviewAction(action: ReviewAction): boolean {
+		if (phase !== 'question' || !current) return false;
+
+		switch (action) {
+			case 'flip':
+				if (flipped) return false;
 				flip();
-			}
-			return;
+				return true;
+			case 'correct':
+				if (!flipped) return false;
+				void grade(true);
+				return true;
+			case 'wrong':
+				if (!flipped) return false;
+				void grade(false);
+				return true;
+			case 'moreInfo':
+				if (!flipped || isLocalReviewCard(current)) return false;
+				void toggleMoreInfo();
+				return true;
+			case 'undo':
+				if (!undoSnapshot || endingReview) return false;
+				undoPreviousQuestion();
+				return true;
 		}
+	}
 
-		if (key === $keybindings.correct) {
-			e.preventDefault();
-			grade(true);
-		} else if (key === $keybindings.wrong) {
-			e.preventDefault();
-			grade(false);
+	function handleKeydown(e: KeyboardEvent) {
+		const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+		for (const action of reviewActions) {
+			if ($keybindings[action] === key && runReviewAction(action)) {
+				e.preventDefault();
+				return;
+			}
 		}
 	}
 
 	function handleGamepadButton(button: number) {
-		if (phase !== 'question' || !current) return;
-
-		if (!flipped) {
-			if (button === $gamepadBindings.flip) flip();
-			return;
-		}
-
-		if (button === $gamepadBindings.correct) {
-			grade(true);
-		} else if (button === $gamepadBindings.wrong) {
-			grade(false);
+		for (const action of reviewActions) {
+			if ($gamepadBindings[action] === button && runReviewAction(action)) return;
 		}
 	}
 </script>

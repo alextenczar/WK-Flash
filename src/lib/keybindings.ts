@@ -11,12 +11,18 @@ export interface Keybindings {
 	correct: string;
 	/** Grades the card wrong. Only takes effect once the card is flipped. */
 	wrong: string;
+	/** Opens or closes the more-information panel. Only takes effect once the card is flipped. */
+	moreInfo: string;
+	/** Returns to the previous review question. Needs the undo button preference turned on. */
+	undo: string;
 }
 
 export const defaultKeybindings: Keybindings = {
 	flip: 'd',
 	correct: 'd',
-	wrong: 'a'
+	wrong: 'a',
+	moreInfo: 'f',
+	undo: 'ArrowUp'
 };
 
 /** Gamepad button indices, using the W3C "standard" mapping. */
@@ -24,13 +30,30 @@ export interface GamepadBindings {
 	flip: number;
 	correct: number;
 	wrong: number;
+	moreInfo: number;
+	undo: number;
 }
 
 export const defaultGamepadBindings: GamepadBindings = {
 	flip: 0,
 	correct: 0,
-	wrong: 1
+	wrong: 1,
+	moreInfo: 3,
+	undo: 5
 };
+
+const keyboardKeyNames: Record<string, string> = {
+	ArrowUp: '↑',
+	ArrowDown: '↓',
+	ArrowLeft: '←',
+	ArrowRight: '→',
+	' ': 'Space'
+};
+
+/** Human-readable name for a stored keyboard binding. */
+export function keyboardKeyLabel(key: string): string {
+	return keyboardKeyNames[key] ?? key.toUpperCase();
+}
 
 /** Button names for the W3C "standard" mapping, with Xbox and PlayStation names. */
 const gamepadButtonNames = [
@@ -64,7 +87,9 @@ function parseKeybindings(stored: string | null): Keybindings {
 		return {
 			flip: typeof parsed.flip === 'string' ? parsed.flip : defaultKeybindings.flip,
 			correct: typeof parsed.correct === 'string' ? parsed.correct : defaultKeybindings.correct,
-			wrong: typeof parsed.wrong === 'string' ? parsed.wrong : defaultKeybindings.wrong
+			wrong: typeof parsed.wrong === 'string' ? parsed.wrong : defaultKeybindings.wrong,
+			moreInfo: typeof parsed.moreInfo === 'string' ? parsed.moreInfo : defaultKeybindings.moreInfo,
+			undo: typeof parsed.undo === 'string' ? parsed.undo : defaultKeybindings.undo
 		};
 	} catch {
 		return defaultKeybindings;
@@ -80,7 +105,9 @@ function parseGamepadBindings(stored: string | null): GamepadBindings {
 		return {
 			flip: valid(parsed.flip, defaultGamepadBindings.flip),
 			correct: valid(parsed.correct, defaultGamepadBindings.correct),
-			wrong: valid(parsed.wrong, defaultGamepadBindings.wrong)
+			wrong: valid(parsed.wrong, defaultGamepadBindings.wrong),
+			moreInfo: valid(parsed.moreInfo, defaultGamepadBindings.moreInfo),
+			undo: valid(parsed.undo, defaultGamepadBindings.undo)
 		};
 	} catch {
 		return defaultGamepadBindings;
