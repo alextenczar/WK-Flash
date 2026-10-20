@@ -8,6 +8,21 @@ export function primaryMeaning(subject: WKSubject): string {
 	);
 }
 
+/**
+ * Path segment for a subject's detail page. WaniKani radicals are addressed by their
+ * slug (an English name such as "hills"), not by their character.
+ */
+export function subjectRouteId(subject: WKSubject): string {
+	if (subject.object === 'radical') return subject.data.slug;
+	return subject.data.characters ?? subject.data.slug;
+}
+
+/** Image for subjects without written characters (image-only radicals). Prefers SVG. */
+export function subjectImageUrl(subject: WKSubject): string | null {
+	const images = subject.data.character_images ?? [];
+	return (images.find((image) => image.content_type === 'image/svg+xml') ?? images[0])?.url ?? null;
+}
+
 export function allMeanings(subject: WKSubject): string[] {
 	return subject.data.meanings.map((m) => m.meaning);
 }

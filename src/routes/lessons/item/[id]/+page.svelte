@@ -6,7 +6,14 @@
 	import { getStaticLocalN1Subject } from '$lib/local-n1-reviews';
 	import { playPronunciation, reviewAudioSettings } from '$lib/review-audio';
 	import { getSubjectBySlug, getSubjectsByIds, WaniKaniError } from '$lib/wanikani/api';
-	import { allMeanings, primaryMeaning, readingsForDisplay, vocabularyByReading } from '$lib/wanikani/matching';
+	import {
+		allMeanings,
+		primaryMeaning,
+		readingsForDisplay,
+		subjectImageUrl,
+		subjectRouteId,
+		vocabularyByReading
+	} from '$lib/wanikani/matching';
 	import type { WKSubject } from '$lib/wanikani/types';
 
 	let subject = $state<WKSubject | null>(null);
@@ -24,7 +31,7 @@
 
 	function subjectPath(item: WKSubject): string {
 		const type = item.object === 'vocabulary' || item.object === 'kana_vocabulary' ? 'vocab' : item.object;
-		return `/${type}/${encodeURIComponent(item.data.characters ?? item.data.slug)}`;
+		return `/${type}/${encodeURIComponent(subjectRouteId(item))}`;
 	}
 
 	function playAudio() {
@@ -115,7 +122,15 @@
 			class:vocabulary-card={subject.object === 'vocabulary' || subject.object === 'kana_vocabulary'}
 		>
 			<header class="item-header">
-				<div class="characters">{subject.data.characters ?? subject.data.slug}</div>
+				<div class="characters">
+					{#if subject.data.characters}
+						{subject.data.characters}
+					{:else if subjectImageUrl(subject)}
+						<img class="radical-image" src={subjectImageUrl(subject)} alt={primaryMeaning(subject)} />
+					{:else}
+						{subject.data.slug}
+					{/if}
+				</div>
 				<p class="subject-type">
 					{isLocalSubject ? 'Local JLPT N1 · ' : `Level ${subject.data.level} · `}
 					{subject.object.replace('_', ' ')}
@@ -243,6 +258,7 @@
 	.item-page { width: 100%; }
 	.item-header { margin-bottom: 2rem; padding: 1.5rem 0 2rem; border-bottom: 1px solid var(--border); text-align: center; }
 	.characters { font-size: 4rem; line-height: 1.2; }
+	.characters .radical-image { display: inline-block; width: 4rem; height: 4rem; vertical-align: middle; filter: invert(1); }
 	.subject-type { margin-top: .25rem; color: var(--muted); font-weight: 700; text-transform: capitalize; }
 	.radical-card .subject-type, .radical-card .answer-accent { color: #00aaff; }
 	.kanji-card .subject-type, .kanji-card .answer-accent { color: #f100a1; }

@@ -37,7 +37,13 @@
 		restoreLocalReviewProgress,
 		selectPacedLocalCards
 	} from '$lib/local-n1-reviews';
-	import { allMeanings, primaryMeaning, readingsForDisplay, vocabularyByReading } from '$lib/wanikani/matching';
+	import {
+		allMeanings,
+		primaryMeaning,
+		readingsForDisplay,
+		subjectImageUrl,
+		vocabularyByReading
+	} from '$lib/wanikani/matching';
 	import {
 		formatSrsStageUpdate,
 		latestSrsStageUpdate,
@@ -654,10 +660,10 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			<div class="characters" class:small={!current.subject.data.characters}>
 				{#if current.subject.data.characters}
 					{current.subject.data.characters}
-				{:else if current.subject.data.character_images?.length}
+				{:else if subjectImageUrl(current.subject)}
 					<img
 						class="radical-image"
-						src={current.subject.data.character_images.find((i) => i.content_type === 'image/svg+xml')?.url ?? current.subject.data.character_images[0].url}
+						src={subjectImageUrl(current.subject)}
 						alt={current.subject.data.slug}
 					/>
 				{:else}

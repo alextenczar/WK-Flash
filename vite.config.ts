@@ -31,7 +31,7 @@ export default defineConfig({
 					'font-src': ['self', 'data:'],
 					'form-action': ['self'],
 					'frame-ancestors': ['none'],
-					'img-src': ['self', 'data:', 'https://cdn.wanikani.com'],
+					'img-src': ['self', 'data:', 'https://cdn.wanikani.com', 'https://files.wanikani.com'],
 					'manifest-src': ['self'],
 					'media-src': ['self', 'https://cdn.wanikani.com', 'https://files.wanikani.com'],
 					'object-src': ['none'],

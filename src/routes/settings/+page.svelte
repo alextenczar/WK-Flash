@@ -252,6 +252,12 @@
 				: 'No controller detected. Press a button on it to connect.'}
 		</p>
 		<div class="keybinding-list">
+			<div class="keybinding-header">
+				<div class="keybinding-inputs">
+					<span>Keyboard</span>
+					<span>Controller</span>
+				</div>
+			</div>
 			{#each keybindingActions as action (action.key)}
 				<div class="keybinding-row">
 					<div>
@@ -346,10 +352,26 @@
 		font-family: monospace;
 	}
 
+	.keybinding-header {
+		display: flex;
+		justify-content: flex-end;
+		color: var(--muted);
+		font-size: 0.85rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
 	.keybinding-inputs {
 		display: flex;
 		gap: 0.5rem;
 		flex-shrink: 0;
+	}
+
+	/* Keyboard and controller columns share a width so headers line up with their buttons. */
+	.keybinding-inputs > * {
+		width: 7.5rem;
+		text-align: center;
 	}
 
 	.gamepad-key {

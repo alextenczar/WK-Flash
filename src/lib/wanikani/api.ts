@@ -1,6 +1,7 @@
 import { browser } from '$app/environment';
 import type { ReviewCard, WKAssignment, WKLevelProgression, WKReviewStatistic, WKSubject, WKUser } from './types';
 import { calculateDailyReviewActivity, type DailyReviewActivity } from './daily-review-activity';
+import { primaryMeaning, subjectImageUrl } from './matching';
 
 const BASE_URL = 'https://api.wanikani.com/v2';
 const SUBJECT_CACHE_NAME = 'wk-flash-wanikani-subjects-v1';
@@ -691,6 +692,50 @@ function reviewCardsFromData(
 	});
 }
 
+export interface LevelRadical {
+	id: number;
+	/** Written character, or null for image-only radicals. */
+	character: string | null;
+	slug: string;
+	meaning: string;
+	imageUrl: string | null;
+	srsStage: number | null;
+	availableAt: string | null;
+	passedAt: string | null;
+}
+
+/** Radicals for the user's current level, with their SRS progress. Returns null if the lookup fails. */
+async function getCurrentLevelRadicals(apiToken: string, level: number): Promise<LevelRadical[] | null> {
+	try {
+		const [subjects, levelAssignments] = await Promise.all([
+			wkFetchAllPages<WKSubject>(`/subjects?types=radical&levels=${level}`, apiToken),
+			wkFetchAllPages<WKAssignment>(`/assignments?subject_types=radical&levels=${level}`, apiToken)
+		]);
+		const assignmentsBySubjectId = new Map(
+			levelAssignments.map((assignment) => [assignment.data.subject_id, assignment])
+		);
+		return subjects
+			.filter((subject) => subject.object === 'radical')
+			.sort((first, second) => first.id - second.id)
+			.map((subject) => {
+				const assignment = assignmentsBySubjectId.get(subject.id);
+				return {
+					id: subject.id,
+					character: subject.data.characters,
+					slug: subject.data.slug,
+					meaning: primaryMeaning(subject),
+					imageUrl: subjectImageUrl(subject),
+					srsStage: assignment?.data.srs_stage ?? null,
+					availableAt: assignment?.data.available_at ?? null,
+					passedAt: assignment?.data.passed_at ?? null
+				};
+			});
+	} catch {
+		// The home page can still show review information if this optional summary fails.
+		return null;
+	}
+}
+
 export async function getReviewOverview(apiToken: string): Promise<{
 	user: WKUser;
 	reviewCount: number;
@@ -705,6 +750,7 @@ export async function getReviewOverview(apiToken: string): Promise<{
 		availableAt: string | null;
 		passedAt: string | null;
 	}[] | null;
+	currentLevelRadicals: LevelRadical[] | null;
 }> {
 	const [reviewData, dailyReviewActivity] = await Promise.all([
 		getAccessibleReviewData(apiToken),
@@ -739,6 +785,7 @@ export async function getReviewOverview(apiToken: string): Promise<{
 	} catch {
 		// The home page can still show review information if this optional summary fails.
 	}
+	const currentLevelRadicals = await getCurrentLevelRadicals(apiToken, user.level);
 	const nextReviewBatch = upcomingReviewBatches[0] ?? null;
 	const cachedUpcomingReviewBatches = upcomingReviewBatches;
 	const cards = reviewCardsFromData(assignments, subjectById, maxAccessibleLevel, user.level);
@@ -757,7 +804,8 @@ export async function getReviewOverview(apiToken: string): Promise<{
 		nextReviewBatch,
 		upcomingReviewBatches: cachedUpcomingReviewBatches,
 		dailyReviewActivity,
-		currentLevelKanji
+		currentLevelKanji,
+		currentLevelRadicals
 	};
 }
 

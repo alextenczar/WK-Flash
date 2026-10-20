@@ -4,7 +4,7 @@
 	import { apiKey } from '$lib/storage';
 	import { pendingLessonStarts } from '$lib/lesson-outbox';
 	import { getLessonQueue, WaniKaniError, type LessonCard } from '$lib/wanikani/api';
-	import { primaryMeaning } from '$lib/wanikani/matching';
+	import { primaryMeaning, subjectRouteId } from '$lib/wanikani/matching';
 
 	const SELECTED_LESSONS_KEY = 'wk-flash:selected-lessons';
 
@@ -36,7 +36,7 @@
 		const type = lesson.subject.object === 'vocabulary' || lesson.subject.object === 'kana_vocabulary'
 			? 'vocab'
 			: lesson.subject.object;
-		return `/${type}/${encodeURIComponent(lesson.subject.data.characters ?? lesson.subject.data.slug)}?from=lessons`;
+		return `/${type}/${encodeURIComponent(subjectRouteId(lesson.subject))}?from=lessons`;
 	}
 
 	function toggleLesson(assignmentId: number) {

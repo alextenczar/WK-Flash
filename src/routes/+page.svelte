@@ -12,10 +12,10 @@
 		REVIEW_QUEUE_FRESH_MS,
 		WaniKaniError
 	} from '$lib/wanikani/api';
-	import type { NextReviewBatch } from '$lib/wanikani/api';
+	import type { LevelRadical, NextReviewBatch } from '$lib/wanikani/api';
 	import type { ReviewCard, WKUser } from '$lib/wanikani/types';
 	import type { WKSubject } from '$lib/wanikani/types';
-	import { primaryMeaning } from '$lib/wanikani/matching';
+	import { primaryMeaning, subjectRouteId } from '$lib/wanikani/matching';
 import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 
 	const REVIEW_COUNT_KEY = 'wk-flash:last-due-count';
@@ -38,6 +38,8 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 		availableAt: string | null;
 		passedAt: string | null;
 	}[] | null>(null);
+	let currentLevelRadicals = $state<LevelRadical[] | null>(null);
+	let guruRadicalCount = $derived(currentLevelRadicals?.filter((item) => item.passedAt !== null).length ?? 0);
 	let guruKanjiCount = $derived(currentLevelKanji?.filter((item) => item.passedAt !== null).length ?? 0);
 	let requiredGuruKanji = $derived(currentLevelKanji?.length ? Math.ceil(currentLevelKanji.length * 0.9) : 0);
 	let selectedKanjiCharacter = $state<string | null>(null);
@@ -82,6 +84,7 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 				!forceRefresh &&
 				cachedQueue &&
 				currentLevelKanji !== null &&
+				currentLevelRadicals !== null &&
 				typeof cachedQueue.reviewCount === 'number' &&
 				cachedQueue.reviewCount > 0 &&
 				cachedQueue.nextReviewBatch !== undefined &&
@@ -101,6 +104,7 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 			const overview = await getReviewOverview($apiKey);
 			user = overview.user;
 			currentLevelKanji = overview.currentLevelKanji;
+			currentLevelRadicals = overview.currentLevelRadicals;
 			showCachedQueue(
 				overview.cards,
 				overview.user,
@@ -236,7 +240,7 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 		const type = subject.object === 'vocabulary' || subject.object === 'kana_vocabulary'
 			? 'vocab'
 			: subject.object;
-		return `/${type}/${encodeURIComponent(subject.data.characters ?? subject.data.slug)}?from=home`;
+		return `/${type}/${encodeURIComponent(subjectRouteId(subject))}?from=home`;
 	}
 
 	async function toggleUpcomingReviewItems(hour: { start: Date; subjectIds: number[] }) {
@@ -376,6 +380,39 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 			<a href="/review"><button class="primary">Start Review</button></a>
 		{/if}
 
+		{#if currentLevelRadicals?.length}
+			<section class="level-kanji" aria-labelledby="level-radicals-heading">
+				<div class="level-kanji-heading">
+					<h2 id="level-radicals-heading">Level {user?.level} radicals</h2>
+					<p><strong>{guruRadicalCount}</strong> / {currentLevelRadicals.length} Guru'd</p>
+				</div>
+				<div class="radical-grid">
+					{#each currentLevelRadicals as item (item.id)}
+						<a
+							href="/radical/{encodeURIComponent(item.slug)}?from=home"
+							class="radical-item"
+							title="{item.meaning}: {kanjiDueLabel(item)}"
+							aria-label="{item.meaning}: {kanjiDueLabel(item)}"
+						>
+							<span class="radical-glyph" lang="ja">
+								{#if item.character}
+									{item.character}
+								{:else if item.imageUrl}
+									<img class="radical-image" src={item.imageUrl} alt="" />
+								{:else}
+									{item.slug}
+								{/if}
+							</span>
+							<span class="stage-track" aria-hidden="true">
+								{#each Array(5) as _, index}
+									<span class:filled={index < (item.passedAt !== null ? 5 : Math.min(item.srsStage ?? 0, 4))}></span>
+								{/each}
+							</span>
+						</a>
+					{/each}
+				</div>
+			</section>
+		{/if}
 		{#if currentLevelKanji?.length}
 			<section class="level-kanji" aria-labelledby="level-kanji-heading">
 				<div class="level-kanji-heading">
@@ -618,6 +655,48 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 	.level-kanji-heading p {
 		color: var(--muted);
 		font-size: 0.9rem;
+	}
+
+	.radical-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(2.75rem, 1fr));
+		gap: 0.65rem 0.75rem;
+		max-width: 44rem;
+	}
+
+	.radical-item {
+		display: grid;
+		justify-items: center;
+		gap: 0.4rem;
+		color: var(--text);
+		text-decoration: none;
+	}
+
+	.radical-item:hover .radical-glyph,
+	.radical-item:focus-visible .radical-glyph {
+		border-color: var(--accent);
+	}
+
+	.radical-item:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 3px;
+	}
+
+	.radical-glyph {
+		display: grid;
+		place-items: center;
+		width: 2.75rem;
+		aspect-ratio: 1;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		font-size: 1.5rem;
+		overflow: hidden;
+	}
+
+	.radical-image {
+		width: 64%;
+		height: 64%;
+		filter: invert(1);
 	}
 
 	.kanji-grid {
