@@ -14,6 +14,8 @@
 		showSrsChanges,
 		showTimeEstimate,
 		showUndoButton,
+		appendToQueue,
+		requeueOffset,
 		sortReviewCards
 	} from '$lib/review-preferences';
 	import { playPronunciation, reviewAudioSettings } from '$lib/review-audio';
@@ -295,7 +297,11 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			);
 			if (newCards.length === 0) return;
 
-			queue = [...queue, ...sortReviewCards(newCards, $reviewSort, $prioritizeCurrentLevel)];
+			queue = appendToQueue(
+				queue,
+				sortReviewCards(newCards, $reviewSort, $prioritizeCurrentLevel),
+				$prioritizeCurrentLevel
+			);
 			const nextKnownIds = new Set(knownAssignmentIds);
 			const nextPendingIds = new Set(pendingIds);
 			for (const card of newCards) {
@@ -536,7 +542,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		} else {
 			// Send the card back into the deck a few cards later, Anki-style.
 			const rest = queue.slice(1);
-			const offset = Math.min(rest.length, 3 + Math.floor(Math.random() * 4));
+			const offset = requeueOffset(rest, card, $prioritizeCurrentLevel);
 			rest.splice(offset, 0, card);
 			queue = rest;
 		}

@@ -100,12 +100,54 @@ export function sortReviewCards(
 		});
 	}
 
-	if (!prioritizeLevel) return sorted;
-	const currentLevel = sorted.filter(
-		(card) => card.currentUserLevel !== undefined && card.subject.data.level === card.currentUserLevel
-	);
-	const otherLevels = sorted.filter(
-		(card) => card.currentUserLevel === undefined || card.subject.data.level !== card.currentUserLevel
-	);
-	return [...currentLevel, ...otherLevels];
+	return prioritizeLevel ? prioritizeCurrentLevelOrder(sorted) : sorted;
+}
+
+export function isCurrentLevelCard(card: ReviewCard): boolean {
+	return card.currentUserLevel !== undefined && card.subject.data.level === card.currentUserLevel;
+}
+
+/** Moves current-level cards ahead of the rest, keeping each group's relative order. */
+export function prioritizeCurrentLevelOrder(cards: ReviewCard[]): ReviewCard[] {
+	return [...cards.filter(isCurrentLevelCard), ...cards.filter((card) => !isCurrentLevelCard(card))];
+}
+
+/**
+ * Where to re-insert a missed card in the rest of the queue: a few positions in, Anki-style.
+ * With prioritization on, the card stays inside its own group so current-level cards keep
+ * coming first.
+ */
+export function requeueOffset(
+	rest: ReviewCard[],
+	card: ReviewCard,
+	prioritizeLevel: boolean,
+	random: () => number = Math.random
+): number {
+	const jitter = 3 + Math.floor(random() * 4);
+	let start = 0;
+	let end = rest.length;
+	if (prioritizeLevel) {
+		const currentCount = rest.filter(isCurrentLevelCard).length;
+		if (isCurrentLevelCard(card)) {
+			end = currentCount;
+		} else {
+			start = currentCount;
+		}
+	}
+	return start + Math.min(end - start, jitter);
+}
+
+/**
+ * Adds newly due cards to the queue. The card at the front is the one on screen, so it stays
+ * there; with prioritization on, the remaining cards keep current-level items first.
+ */
+export function appendToQueue(
+	queue: ReviewCard[],
+	incoming: ReviewCard[],
+	prioritizeLevel: boolean
+): ReviewCard[] {
+	if (!prioritizeLevel) return [...queue, ...incoming];
+	const [head, ...rest] = queue;
+	const ordered = prioritizeCurrentLevelOrder([...rest, ...incoming]);
+	return head ? [head, ...ordered] : ordered;
 }
