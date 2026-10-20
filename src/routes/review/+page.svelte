@@ -3,7 +3,8 @@
 	import { onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
 	import { whenPersistentStorageReady } from '$lib/persistent-storage';
-	import { keybindings } from '$lib/keybindings';
+	import { gamepadBindings, gamepadButtonLabel, keybindings } from '$lib/keybindings';
+	import { gamepadConnected, startGamepadPolling } from '$lib/gamepad';
 	import {
 		prioritizeCurrentLevel,
 		interweaveLocalN1Reviews,
@@ -340,6 +341,8 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	}
 
 	onMount(() => {
+		const stopGamepad = startGamepadPolling(handleGamepadButton);
+
 		void (async () => {
 			await whenPersistentStorageReady();
 			if (!$apiKey) {
@@ -352,6 +355,8 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				load();
 			}
 		})();
+
+		return stopGamepad;
 	});
 
 	function onPageHide() {
@@ -558,6 +563,21 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			grade(false);
 		}
 	}
+
+	function handleGamepadButton(button: number) {
+		if (phase !== 'question' || !current) return;
+
+		if (!flipped) {
+			if (button === $gamepadBindings.flip) flip();
+			return;
+		}
+
+		if (button === $gamepadBindings.correct) {
+			grade(true);
+		} else if (button === $gamepadBindings.wrong) {
+			grade(false);
+		}
+	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} onpagehide={onPageHide} />
@@ -591,6 +611,12 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 					<div class="progress-fill" style="width: {(completedCount / totalUnique) * 100}%"></div>
 				</div>
 				<p class="muted">{completedCount} / {totalUnique} complete{wrapUp ? ' · finishing missed cards' : ''}</p>
+				{#if $gamepadConnected}
+					<p class="muted gamepad-status" title={$gamepadConnected}>
+						Controller connected: flip {gamepadButtonLabel($gamepadBindings.flip)}, correct
+						{gamepadButtonLabel($gamepadBindings.correct)}, wrong {gamepadButtonLabel($gamepadBindings.wrong)}
+					</p>
+				{/if}
 				{#if $showTimeEstimate}
 					<p class="muted time-estimate" aria-live="polite">
 						{#if estimatedRemainingTimeMs === null}

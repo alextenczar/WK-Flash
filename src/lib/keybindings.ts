@@ -1,7 +1,8 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 import { onPersistentHydrate, readPersistent, writePersistent } from '$lib/persistent-storage';
 
 const STORAGE_KEY = 'wk-flash:keybindings';
+const GAMEPAD_STORAGE_KEY = 'wk-flash:gamepad-bindings';
 
 export interface Keybindings {
 	/** Flips the card from front to back. */
@@ -18,6 +19,44 @@ export const defaultKeybindings: Keybindings = {
 	wrong: 'a'
 };
 
+/** Gamepad button indices, using the W3C "standard" mapping. */
+export interface GamepadBindings {
+	flip: number;
+	correct: number;
+	wrong: number;
+}
+
+export const defaultGamepadBindings: GamepadBindings = {
+	flip: 0,
+	correct: 0,
+	wrong: 1
+};
+
+/** Button names for the W3C "standard" mapping, with Xbox and PlayStation names. */
+const gamepadButtonNames = [
+	'A / Cross',
+	'B / Circle',
+	'X / Square',
+	'Y / Triangle',
+	'LB / L1',
+	'RB / R1',
+	'LT / L2',
+	'RT / R2',
+	'Back / Select',
+	'Start / Options',
+	'L3',
+	'R3',
+	'D-pad up',
+	'D-pad down',
+	'D-pad left',
+	'D-pad right',
+	'Home / PS'
+];
+
+export function gamepadButtonLabel(button: number): string {
+	return gamepadButtonNames[button] ?? `Button ${button}`;
+}
+
 function parseKeybindings(stored: string | null): Keybindings {
 	if (!stored) return defaultKeybindings;
 	try {
@@ -32,8 +71,24 @@ function parseKeybindings(stored: string | null): Keybindings {
 	}
 }
 
+function parseGamepadBindings(stored: string | null): GamepadBindings {
+	if (!stored) return defaultGamepadBindings;
+	try {
+		const parsed: Partial<GamepadBindings> = JSON.parse(stored);
+		const valid = (value: unknown, fallback: number) =>
+			Number.isInteger(value) && (value as number) >= 0 ? (value as number) : fallback;
+		return {
+			flip: valid(parsed.flip, defaultGamepadBindings.flip),
+			correct: valid(parsed.correct, defaultGamepadBindings.correct),
+			wrong: valid(parsed.wrong, defaultGamepadBindings.wrong)
+		};
+	} catch {
+		return defaultGamepadBindings;
+	}
+}
+
 function createKeybindingsStore() {
-	const { subscribe, set, update } = writable<Keybindings>(parseKeybindings(readPersistent(STORAGE_KEY)));
+	const { subscribe, set } = writable<Keybindings>(parseKeybindings(readPersistent(STORAGE_KEY)));
 
 	onPersistentHydrate(() => {
 		set(parseKeybindings(readPersistent(STORAGE_KEY)));
@@ -47,11 +102,7 @@ function createKeybindingsStore() {
 	return {
 		subscribe,
 		setBinding(action: keyof Keybindings, key: string) {
-			update((current) => {
-				const next = { ...current, [action]: key };
-				persist(next);
-				return next;
-			});
+			persist({ ...get({ subscribe }), [action]: key });
 		},
 		reset() {
 			persist(defaultKeybindings);
@@ -59,4 +110,30 @@ function createKeybindingsStore() {
 	};
 }
 
+function createGamepadBindingsStore() {
+	const { subscribe, set } = writable<GamepadBindings>(
+		parseGamepadBindings(readPersistent(GAMEPAD_STORAGE_KEY))
+	);
+
+	onPersistentHydrate(() => {
+		set(parseGamepadBindings(readPersistent(GAMEPAD_STORAGE_KEY)));
+	});
+
+	function persist(value: GamepadBindings) {
+		writePersistent(GAMEPAD_STORAGE_KEY, JSON.stringify(value));
+		set(value);
+	}
+
+	return {
+		subscribe,
+		setBinding(action: keyof GamepadBindings, button: number) {
+			persist({ ...get({ subscribe }), [action]: button });
+		},
+		reset() {
+			persist(defaultGamepadBindings);
+		}
+	};
+}
+
 export const keybindings = createKeybindingsStore();
+export const gamepadBindings = createGamepadBindingsStore();

@@ -39,6 +39,10 @@
 				<p>Customize review keybindings, show or hide mnemonics and parts of speech, and adjust pronunciation playback and volume.</p>
 			</li>
 			<li>
+				<h3>Controller support</h3>
+				<p>Flip cards and mark reviews correct or wrong with a connected game controller, such as an Xbox or PlayStation pad. Set the buttons for each action in Settings, next to the keyboard keys.</p>
+			</li>
+			<li>
 				<h3>Review sorting</h3>
 				<p>Order new reviews by SRS stage, WaniKani level, or item type; keep WaniKani's default order or shuffle randomly. You can also prioritize items from your current level.</p>
 			</li>

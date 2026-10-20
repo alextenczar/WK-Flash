@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { keybindings, type Keybindings } from '$lib/keybindings';
+	import { onMount } from 'svelte';
+	import {
+		gamepadBindings,
+		gamepadButtonLabel,
+		keybindings,
+		type Keybindings
+	} from '$lib/keybindings';
+	import { gamepadConnected, startGamepadPolling } from '$lib/gamepad';
 	import { apiKey } from '$lib/storage';
 	import {
 		prioritizeCurrentLevel,
@@ -22,7 +29,8 @@
 	let checking = $state(false);
 	let error = $state('');
 	let success = $state('');
-	let listeningFor = $state<keyof Keybindings | null>(null);
+	/** Which binding is waiting for input: a keyboard key or a controller button. */
+	let listening = $state<{ kind: 'key' | 'pad'; action: keyof Keybindings } | null>(null);
 
 	const keybindingActions: { key: keyof Keybindings; label: string; hint: string }[] = [
 		{ key: 'flip', label: 'Flip card', hint: 'Reveals the meaning and reading.' },
@@ -30,19 +38,44 @@
 		{ key: 'wrong', label: 'Mark wrong', hint: 'Only active once the card is flipped; requeues the card.' }
 	];
 
-	function startListening(action: keyof Keybindings) {
-		listeningFor = action;
+	function isListening(kind: 'key' | 'pad', action: keyof Keybindings) {
+		return listening?.kind === kind && listening.action === action;
+	}
+
+	function toggleListening(kind: 'key' | 'pad', action: keyof Keybindings) {
+		listening = isListening(kind, action) ? null : { kind, action };
 	}
 
 	function handleKeydown(event: KeyboardEvent, action: keyof Keybindings) {
 		event.preventDefault();
 		if (event.key === 'Escape') {
-			listeningFor = null;
+			listening = null;
 			return;
 		}
 		keybindings.setBinding(action, event.key.length === 1 ? event.key.toLowerCase() : event.key);
-		listeningFor = null;
+		listening = null;
 	}
+
+	function handlePadEscape(event: KeyboardEvent) {
+		if (event.key !== 'Escape') return;
+		event.preventDefault();
+		listening = null;
+	}
+
+	/** Called on each controller button press; only used while a controller binding is being set. */
+	function captureButton(button: number) {
+		if (listening?.kind !== 'pad') return;
+		gamepadBindings.setBinding(listening.action, button);
+		listening = null;
+	}
+
+	function resetKeybindings() {
+		keybindings.reset();
+		gamepadBindings.reset();
+		listening = null;
+	}
+
+	onMount(() => startGamepadPolling(captureButton));
 
 	async function save() {
 		error = '';
@@ -209,7 +242,15 @@
 
 	<section class="preferences" id="keybindings">
 		<h2>Keybindings</h2>
-		<p class="muted">Select a binding, then press the key you want. Press Escape to cancel.</p>
+		<p class="muted">
+			Select a keyboard or controller binding, then press the key or controller button you want. Press
+			Escape to cancel.
+		</p>
+		<p class="muted">
+			{$gamepadConnected
+				? `Controller connected: ${$gamepadConnected}`
+				: 'No controller detected. Press a button on it to connect.'}
+		</p>
 		<div class="keybinding-list">
 			{#each keybindingActions as action (action.key)}
 				<div class="keybinding-row">
@@ -217,19 +258,32 @@
 						<div class="keybinding-label">{action.label}</div>
 						<div class="keybinding-hint">{action.hint}</div>
 					</div>
-					<button
-						type="button"
-						class="keybinding-key"
-						class:listening={listeningFor === action.key}
-						onclick={() => startListening(action.key)}
-						onkeydown={(event) => listeningFor === action.key && handleKeydown(event, action.key)}
-					>
-						{listeningFor === action.key ? 'Press a key...' : $keybindings[action.key]}
-					</button>
+					<div class="keybinding-inputs">
+						<button
+							type="button"
+							class="keybinding-key"
+							class:listening={isListening('key', action.key)}
+							onclick={() => toggleListening('key', action.key)}
+							onkeydown={(event) => isListening('key', action.key) && handleKeydown(event, action.key)}
+						>
+							{isListening('key', action.key) ? 'Press a key...' : $keybindings[action.key]}
+						</button>
+						<button
+							type="button"
+							class="keybinding-key gamepad-key"
+							class:listening={isListening('pad', action.key)}
+							onclick={() => toggleListening('pad', action.key)}
+							onkeydown={(event) => isListening('pad', action.key) && handlePadEscape(event)}
+						>
+							{isListening('pad', action.key)
+								? 'Press a button...'
+								: gamepadButtonLabel($gamepadBindings[action.key])}
+						</button>
+					</div>
 				</div>
 			{/each}
 		</div>
-		<button type="button" onclick={() => keybindings.reset()}>Reset to defaults</button>
+		<button type="button" onclick={resetKeybindings}>Reset to defaults</button>
 	</section>
 
 	{#if error}<p class="error">{error}</p>{/if}
@@ -290,6 +344,18 @@
 		min-width: 6rem;
 		text-transform: uppercase;
 		font-family: monospace;
+	}
+
+	.keybinding-inputs {
+		display: flex;
+		gap: 0.5rem;
+		flex-shrink: 0;
+	}
+
+	.gamepad-key {
+		text-transform: none;
+		font-family: inherit;
+		min-width: 7.5rem;
 	}
 
 	.keybinding-key.listening {
