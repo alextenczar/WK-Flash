@@ -749,6 +749,7 @@ export async function getReviewOverview(apiToken: string): Promise<{
 		srsStage: number | null;
 		availableAt: string | null;
 		passedAt: string | null;
+		unlocked: boolean;
 	}[] | null;
 	currentLevelRadicals: LevelRadical[] | null;
 }> {
@@ -763,6 +764,7 @@ export async function getReviewOverview(apiToken: string): Promise<{
 		srsStage: number | null;
 		availableAt: string | null;
 		passedAt: string | null;
+		unlocked: boolean;
 	}[] | null = null;
 	try {
 		const [subjects, levelAssignments] = await Promise.all([
@@ -780,7 +782,12 @@ export async function getReviewOverview(apiToken: string): Promise<{
 				character: subject.data.characters!,
 				srsStage: assignmentsBySubjectId.get(subject.id)?.data.srs_stage ?? null,
 				availableAt: assignmentsBySubjectId.get(subject.id)?.data.available_at ?? null,
-				passedAt: assignmentsBySubjectId.get(subject.id)?.data.passed_at ?? null
+				passedAt: assignmentsBySubjectId.get(subject.id)?.data.passed_at ?? null,
+				// Locked kanji have no unlock yet, so no unlocked_at (or started_at) on their assignment.
+				unlocked: Boolean(
+					assignmentsBySubjectId.get(subject.id)?.data.unlocked_at ??
+						assignmentsBySubjectId.get(subject.id)?.data.started_at
+				)
 			}));
 	} catch {
 		// The home page can still show review information if this optional summary fails.

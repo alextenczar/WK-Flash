@@ -37,10 +37,17 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 		srsStage: number | null;
 		availableAt: string | null;
 		passedAt: string | null;
+		unlocked: boolean;
 	}[] | null>(null);
 	let currentLevelRadicals = $state<LevelRadical[] | null>(null);
 	let guruRadicalCount = $derived(currentLevelRadicals?.filter((item) => item.passedAt !== null).length ?? 0);
 	let guruKanjiCount = $derived(currentLevelKanji?.filter((item) => item.passedAt !== null).length ?? 0);
+	// Locked kanji go last, dimmed, so the unlocked ones read first.
+	let orderedLevelKanji = $derived(
+		currentLevelKanji
+			? [...currentLevelKanji.filter((item) => item.unlocked), ...currentLevelKanji.filter((item) => !item.unlocked)]
+			: []
+	);
 	let requiredGuruKanji = $derived(currentLevelKanji?.length ? Math.ceil(currentLevelKanji.length * 0.9) : 0);
 	let selectedKanjiCharacter = $state<string | null>(null);
 	let selectedKanjiPopupPosition = $state<{ left: number; top: number } | null>(null);
@@ -277,6 +284,10 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 		return `Due ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(dueAt)}`;
 	}
 
+	function kanjiStatusLabel(item: { unlocked: boolean; srsStage: number | null; availableAt: string | null }): string {
+		return item.unlocked ? kanjiDueLabel(item) : 'Locked: not unlocked yet';
+	}
+
 	function dismissKanjiPopup(event: MouseEvent) {
 		if (!(event.target instanceof Element) || !event.target.closest('.kanji-item')) {
 			selectedKanjiCharacter = null;
@@ -420,12 +431,13 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 					<p><strong>{guruKanjiCount}</strong> / {currentLevelKanji.length} Guru'd</p>
 				</div>
 				<div class="kanji-grid">
-					{#each currentLevelKanji as item (item.character)}
+					{#each orderedLevelKanji as item (item.character)}
 						<button
 							type="button"
 							class="kanji-item"
-							data-tooltip={kanjiDueLabel(item)}
-							aria-label="{item.character}: {kanjiDueLabel(item)}"
+							class:kanji-locked={!item.unlocked}
+							data-tooltip={kanjiStatusLabel(item)}
+							aria-label="{item.character}: {kanjiStatusLabel(item)}"
 							aria-expanded={selectedKanjiCharacter === item.character}
 							onclick={(event) => handleKanjiClick(event, item.character)}
 						>
@@ -440,7 +452,7 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 									class="kanji-due"
 									role="status"
 									style="left: {selectedKanjiPopupPosition?.left ?? 8}px; top: {selectedKanjiPopupPosition?.top ?? 8}px;"
-								>{kanjiDueLabel(item)}</span>
+								>{kanjiStatusLabel(item)}</span>
 							{/if}
 						</button>
 					{/each}
@@ -776,6 +788,12 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 		top: auto;
 		bottom: auto;
 		transform: none;
+	}
+
+	/* Locked kanji are dimmed; the tooltip and popup stay at full strength. */
+	.kanji-item.kanji-locked .kanji-character,
+	.kanji-item.kanji-locked .stage-track {
+		opacity: 0.35;
 	}
 
 	.kanji-character {
