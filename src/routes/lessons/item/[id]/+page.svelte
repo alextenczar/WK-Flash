@@ -258,7 +258,7 @@
 	.item-page { width: 100%; }
 	.item-header { margin-bottom: 2rem; padding: 1.5rem 0 2rem; border-bottom: 1px solid var(--border); text-align: center; }
 	.characters { font-size: 4rem; line-height: 1.2; }
-	.characters .radical-image { display: inline-block; width: 4rem; height: 4rem; vertical-align: middle; filter: invert(1); }
+	.characters .radical-image { display: inline-block; width: 4rem; height: 4rem; vertical-align: middle; filter: invert(var(--image-invert)); }
 	.subject-type { margin-top: .25rem; color: var(--muted); font-weight: 700; text-transform: capitalize; }
 	.radical-card .subject-type, .radical-card .answer-accent { color: #00aaff; }
 	.kanji-card .subject-type, .kanji-card .answer-accent { color: #f100a1; }

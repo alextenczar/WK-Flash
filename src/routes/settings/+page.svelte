@@ -24,6 +24,7 @@
 	} from '$lib/review-preferences';
 	import { clearReviewSession } from '$lib/review-session';
 	import { reviewAudioSettings } from '$lib/review-audio';
+	import { theme, type ThemeMode } from '$lib/theme';
 	import { clearCachedReviewQueue, getUser, WaniKaniError } from '$lib/wanikani/api';
 
 	let input = $state($apiKey);
@@ -144,6 +145,19 @@
 			{/if}
 		</div>
 	</form>
+
+	<section class="preferences" aria-labelledby="appearance-heading">
+		<h2 id="appearance-heading">Appearance</h2>
+		<label class="toggle">
+			<input
+				type="checkbox"
+				checked={$theme === 'light'}
+				onchange={(event) => theme.set((event.currentTarget.checked ? 'light' : 'dark') as ThemeMode)}
+			/>
+			Use light mode
+		</label>
+		<p class="muted">Dark mode is the default. The choice applies across the whole app.</p>
+	</section>
 
 	<section class="preferences" aria-labelledby="review-sort-heading">
 		<h2 id="review-sort-heading">Review order</h2>

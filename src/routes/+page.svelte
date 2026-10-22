@@ -16,8 +16,8 @@
 	import type { LevelRadical, NextReviewBatch } from '$lib/wanikani/api';
 	import type { ReviewCard, WKUser } from '$lib/wanikani/types';
 	import type { WKSubject } from '$lib/wanikani/types';
-	import { primaryMeaning, subjectRouteId } from '$lib/wanikani/matching';
-import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
+	import { primaryMeaning, subjectImageUrl, subjectRouteId } from '$lib/wanikani/matching';
+	import type { WeakestItem } from '$lib/wanikani/weakest-items';
 
 	const REVIEW_COUNT_KEY = 'wk-flash:last-due-count';
 	const hour = new Date().getHours();
@@ -25,7 +25,8 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 
 	let user = $state<WKUser | null>(null);
 	let reviewCount = $state<number | null>(null);
-	let dailyReviewActivity = $state<DailyReviewActivity | null>(null);
+	let weakestItems = $state<WeakestItem[] | null>(null);
+	let weakestExpanded = $state(false);
 	let nextReviewBatch = $state<NextReviewBatch | null | undefined>(undefined);
 	let upcomingReviewBatches = $state<NextReviewBatch[] | undefined>(undefined);
 	let selectedUpcomingHour = $state<number | null>(null);
@@ -67,15 +68,15 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 		cachedUser?: WKUser,
 		serverReviewCount?: number,
 		upcomingBatch?: NextReviewBatch | null,
-		todayActivity?: DailyReviewActivity | null,
-		nextDayBatches?: NextReviewBatch[]
+		nextDayBatches?: NextReviewBatch[],
+		cachedWeakestItems?: WeakestItem[] | null
 	) {
 		const pendingAssignmentIds = new Set($pendingReviews.map((review) => review.assignmentId));
 		const availableCards = cards.filter((card) => !pendingAssignmentIds.has(card.assignmentId));
 		if (cachedUser) user = cachedUser;
 		nextReviewBatch = upcomingBatch;
-		dailyReviewActivity = todayActivity ?? null;
 		upcomingReviewBatches = nextDayBatches;
+		if (cachedWeakestItems !== undefined) weakestItems = cachedWeakestItems;
 		reviewCount = navigator.onLine && serverReviewCount !== undefined
 			? serverReviewCount
 			: availableCards.length;
@@ -106,8 +107,8 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 					cachedQueue.user,
 					cachedQueue.reviewCount,
 					cachedQueue.nextReviewBatch,
-					cachedQueue.dailyReviewActivity,
-					cachedQueue.upcomingReviewBatches
+					cachedQueue.upcomingReviewBatches,
+					cachedQueue.weakestItems
 				);
 				return;
 			}
@@ -120,8 +121,8 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 				overview.user,
 				overview.reviewCount,
 				overview.nextReviewBatch,
-				overview.dailyReviewActivity,
-				overview.upcomingReviewBatches
+				overview.upcomingReviewBatches,
+				overview.weakestItems
 			);
 		} catch (e) {
 			if (cachedQueue) {
@@ -130,8 +131,8 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 					cachedQueue.user,
 					cachedQueue.reviewCount,
 					cachedQueue.nextReviewBatch,
-					cachedQueue.dailyReviewActivity,
-					cachedQueue.upcomingReviewBatches
+					cachedQueue.upcomingReviewBatches,
+					cachedQueue.weakestItems
 				);
 				error = !navigator.onLine
 					? hasSavedReview
@@ -177,8 +178,8 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 			}
 			const cachedQueue = await getCachedReviewQueue();
 			nextReviewBatch = cachedQueue?.nextReviewBatch;
-			dailyReviewActivity = cachedQueue?.dailyReviewActivity ?? null;
 			upcomingReviewBatches = cachedQueue?.upcomingReviewBatches;
+			weakestItems = cachedQueue?.weakestItems ?? null;
 			const pendingAssignmentIds = new Set($pendingReviews.map((review) => review.assignmentId));
 			const availableCards = cachedQueue?.cards.filter(
 				(card) => !pendingAssignmentIds.has(card.assignmentId)
@@ -249,6 +250,11 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 			? 'vocab'
 			: subject.object;
 		return `/${type}/${encodeURIComponent(subjectRouteId(subject))}?from=home`;
+	}
+
+	function subjectTypeLabel(subject: WKSubject): string {
+		if (subject.object === 'kana_vocabulary') return 'Vocabulary';
+		return subject.object.charAt(0).toUpperCase() + subject.object.slice(1);
 	}
 
 	async function toggleUpcomingReviewItems(hour: { start: Date; subjectIds: number[] }) {
@@ -360,11 +366,6 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 		<h1>{greeting}, {user?.username}!</h1>
 		<p>
 			You have <strong>{reviewCount}</strong> review{reviewCount === 1 ? '' : 's'} due.
-			{#if dailyReviewActivity}
-				<span class="daily-review-activity">
-					<strong>{dailyReviewActivity.count}</strong> completed today.
-				</span>
-			{/if}
 			{#if nextReviewBatch !== undefined}
 				<span class="next-review-batch">
 					{#if nextReviewBatch}
@@ -516,17 +517,64 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 				{/if}
 			</section>
 		{/if}
+
+		{#if weakestItems}
+			<section class="weakest-items" aria-labelledby="weakest-items-heading">
+				<div class="level-kanji-heading">
+					<h2 id="weakest-items-heading">Weakest items</h2>
+					<button
+						type="button"
+						class="weakest-toggle"
+						aria-expanded={weakestExpanded}
+						aria-controls="weakest-items-list"
+						onclick={() => (weakestExpanded = !weakestExpanded)}
+					>
+						<span>Lowest lifetime accuracy</span>
+						<span class="weakest-chevron" class:open={weakestExpanded} aria-hidden="true">▾</span>
+					</button>
+				</div>
+				{#if !weakestExpanded}
+					<p class="muted weakest-collapsed-hint">
+						{weakestItems.length === 0
+							? 'No items are below 90% with enough answers yet.'
+							: `${weakestItems.length} item${weakestItems.length === 1 ? '' : 's'} below 90%. Expand to see them.`}
+					</p>
+				{:else if weakestItems.length === 0}
+					<p class="muted" id="weakest-items-list">No items are below 90% with enough answers yet.</p>
+				{:else}
+					<ul class="weakest-list" id="weakest-items-list">
+						{#each weakestItems as item (item.subjectId)}
+							<li>
+								<a class="weakest-row" href={subjectPath(item.subject)}>
+									<span class="weakest-glyph" lang="ja">
+										{#if item.subject.data.characters}
+											{item.subject.data.characters}
+										{:else if subjectImageUrl(item.subject)}
+											<img class="weakest-image" src={subjectImageUrl(item.subject)} alt="" />
+										{:else}
+											{item.subject.data.slug}
+										{/if}
+									</span>
+									<span class="weakest-copy">
+										<strong>{primaryMeaning(item.subject)}</strong>
+										<span>
+											{subjectTypeLabel(item.subject)} · {item.incorrect} missed / {item.total}
+										</span>
+									</span>
+									<strong class="weakest-rate">{item.accuracyPercent}%</strong>
+								</a>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
+		{/if}
 	{/if}
 </div>
 {/if}
 
 <style>
 	.next-review-batch {
-		margin-left: 0.35rem;
-		color: var(--muted);
-	}
-
-	.daily-review-activity {
 		margin-left: 0.35rem;
 		color: var(--muted);
 	}
@@ -540,6 +588,113 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 		margin-top: 2rem;
 		padding-top: 1rem;
 		border-top: 1px solid var(--border);
+	}
+
+	.weakest-items {
+		width: 100%;
+		margin-top: 2rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--border);
+	}
+
+	.weakest-toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.25rem 0.5rem;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: var(--surface);
+		color: var(--muted);
+		font: inherit;
+		font-size: 0.8rem;
+		cursor: pointer;
+	}
+
+	.weakest-toggle:hover,
+	.weakest-toggle:focus-visible {
+		border-color: var(--accent);
+		color: var(--text);
+	}
+
+	.weakest-chevron {
+		display: inline-block;
+		transition: transform 0.15s ease;
+	}
+
+	.weakest-chevron.open {
+		transform: rotate(180deg);
+	}
+
+	.weakest-collapsed-hint {
+		margin: 0;
+		font-size: 0.85rem;
+	}
+
+	.weakest-list {
+		display: grid;
+		gap: 0.5rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.weakest-row {
+		display: grid;
+		grid-template-columns: 2.6rem minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.65rem 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		color: var(--text);
+		text-decoration: none;
+	}
+
+	.weakest-row:hover,
+	.weakest-row:focus-visible {
+		border-color: var(--accent);
+		text-decoration: none;
+	}
+
+	.weakest-glyph {
+		display: grid;
+		place-items: center;
+		min-height: 2.2rem;
+		font-size: 1.35rem;
+		line-height: 1;
+	}
+
+	.weakest-image {
+		width: 1.5rem;
+		height: 1.5rem;
+		object-fit: contain;
+		filter: invert(var(--image-invert));
+	}
+
+	.weakest-copy {
+		display: grid;
+		gap: 0.15rem;
+		min-width: 0;
+	}
+
+	.weakest-copy strong {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.weakest-copy span {
+		overflow: hidden;
+		color: var(--muted);
+		font-size: 0.8rem;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.weakest-rate {
+		color: #c084fc;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.upcoming-reviews {
@@ -713,7 +868,7 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 	.radical-image {
 		width: 64%;
 		height: 64%;
-		filter: invert(1);
+		filter: invert(var(--image-invert));
 	}
 
 	.kanji-grid {

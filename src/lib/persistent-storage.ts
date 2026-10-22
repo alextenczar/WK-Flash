@@ -181,6 +181,16 @@ export async function initPersistentStorage(): Promise<void> {
 					writeLocalStorage(key, value);
 				}
 			}
+
+			for (const key of ['wk-flash:review-heatmap-v1', 'wk-flash:review-heatmap-v2']) {
+				memory.delete(key);
+				removeLocalStorage(key);
+				try {
+					await idbDelete(key);
+				} catch {
+					// Dropping the unused heatmap cache should not block startup.
+				}
+			}
 		} catch {
 			database = null;
 			for (const key of localStorageAppKeys()) {

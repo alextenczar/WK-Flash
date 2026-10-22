@@ -38,11 +38,21 @@
 				"featureList": [
 					"Combined meaning and reading reviews on one flashcard",
 					"Keyboard and game controller controls that work out of the box",
-					"JLPT coverage, SRS heatmap, and level-up forecast",
+					"JLPT coverage, weakest items, and level-up forecast",
 					"Offline review sessions with automatic sync",
 					"Review session recovery stored in the browser"
 				],
 				"browserRequirements": "Requires JavaScript and a WaniKani personal access token."
+			}
+		</script>
+		<script nonce="%sveltekit.nonce%">
+			// Apply the saved theme before first paint. Keep the key in sync with THEME_STORAGE_KEY in src/lib/theme.ts.
+			try {
+				if (localStorage.getItem('wk-flash:theme') === 'light') {
+					document.documentElement.dataset.theme = 'light';
+				}
+			} catch {
+				// Storage can be blocked; the default dark theme applies.
 			}
 		</script>
 		%sveltekit.head%

@@ -4,7 +4,6 @@
 	import jlptVocabulary from '$lib/data/jlpt-vocabulary.json';
 	import { apiKey } from '$lib/storage';
 	import { getJLPTProgressData, WaniKaniError } from '$lib/wanikani/api';
-	import { calculateDailyReviewActivity, type DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 	import { calculateLevelUpForecast } from '$lib/wanikani/level-up-forecast';
 	import type { WKAssignment, WKLevelProgression, WKReviewStatistic, WKSubject } from '$lib/wanikani/types';
 
@@ -64,7 +63,6 @@
 	let vocabularySearch = $state('');
 	let progress = $state<JLPTProgressData | null>(null);
 	let vocabularyProgress = $state<JLPTProgressData | null>(null);
-	let dailyReviewActivity = $state<DailyReviewActivity | null>(null);
 	let levelUpData = $state<LevelUpData | null>(null);
 	let targetDaysPerLevel = $state(7);
 	let loading = $state(true);
@@ -247,8 +245,6 @@
 				reviewStatistics: data.reviewStatistics,
 				levelProgressions: data.levelProgressions
 			};
-			const activity = calculateDailyReviewActivity(data.activityAssignments, data.reviewStatistics);
-			dailyReviewActivity = data.reviewStatistics === null && activity.count === 0 ? null : activity;
 		} catch (cause) {
 			error = cause instanceof WaniKaniError ? cause.message : 'Could not load JLPT progress.';
 		} finally {
@@ -291,33 +287,6 @@
 				<a href="/settings">Connect WaniKani</a>
 			{/if}
 		</p>
-	{/if}
-	{#if $apiKey}
-		<section class="daily-review-summary" aria-labelledby="daily-review-heading">
-			<div>
-				<h2 id="daily-review-heading">Reviews completed today</h2>
-				<p>
-					{#if loading}
-						Updating from WaniKani<span class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></span>
-					{:else if !dailyReviewActivity}
-						Daily review activity is unavailable.
-					{:else if dailyReviewActivity.source === 'assignment_updates'}
-						Estimated from WaniKani assignment updates.
-					{:else if dailyReviewActivity.source === 'review_statistics'}
-						Counted from WaniKani review statistics.
-					{:else}
-						No review activity synced today.
-					{/if}
-				</p>
-			</div>
-			<strong class="daily-review-count" aria-live="polite">
-				{#if loading}
-					<span class="loading-dots" role="status" aria-label="Loading review count"><span></span><span></span><span></span></span>
-				{:else}
-					{dailyReviewActivity?.count ?? '—'}
-				{/if}
-			</strong>
-		</section>
 	{/if}
 	{#if $apiKey}
 		<section class="level-up-calculator" aria-labelledby="level-up-heading">
@@ -681,37 +650,6 @@
 		color: var(--muted);
 		font-size: 0.85rem;
 		font-weight: 400;
-	}
-
-	.daily-review-summary {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		margin: 0;
-		padding: 0.8rem 0;
-		border-block: 1px solid var(--border);
-	}
-
-	.daily-review-summary + .level-up-calculator {
-		margin-top: -0.75rem;
-	}
-
-	.daily-review-summary h2 {
-		margin: 0;
-		font-size: 1rem;
-	}
-
-	.daily-review-summary p {
-		margin: 0.25rem 0 0;
-		color: var(--muted);
-		font-size: 0.85rem;
-	}
-
-	.daily-review-count {
-		flex: 0 0 auto;
-		font-size: 1.6rem;
-		font-variant-numeric: tabular-nums;
 	}
 
 	.level-up-calculator {

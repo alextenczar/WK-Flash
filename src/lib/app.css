@@ -70,6 +70,7 @@
 	font-display: swap;
 }
 
+/* Dark is the default theme. Light overrides below are applied when <html data-theme="light">. */
 :root {
 	color-scheme: dark;
 	--bg: #000000;
@@ -82,6 +83,13 @@
 	--accent-hover: #60a5fa;
 	--good: #3fbf6a;
 	--bad: #e5484d;
+	/* RGB channels of the color used for hairline overlays: white on dark, black on light. */
+	--contrast: 255 255 255;
+	--card-start: #18181b;
+	--card-end: #09090b;
+	--button-hover: transparent;
+	/* WaniKani radical artwork is drawn in black; invert it to white on dark, keep it as-is on light. */
+	--image-invert: 1;
 	font-family:
 		'Noto Sans JP',
 		system-ui,
@@ -90,13 +98,32 @@
 		sans-serif;
 }
 
+:root[data-theme='light'] {
+	color-scheme: light;
+	--bg: #ffffff;
+	--surface: #f4f4f5;
+	--surface-alt: #e4e4e7;
+	--border: #b5b5bd;
+	--text: #18181b;
+	--muted: #52525b;
+	--accent: #2563eb;
+	--accent-hover: #1d4ed8;
+	--good: #15803d;
+	--bad: #b91c1c;
+	--contrast: 0 0 0;
+	--card-start: #ffffff;
+	--card-end: #f4f4f5;
+	--button-hover: #d4d4d8;
+	--image-invert: 0;
+}
+
 * {
 	box-sizing: border-box;
 }
 
 ::selection {
-	background: #fff;
-	color: #000;
+	background: var(--text);
+	color: var(--bg);
 }
 
 /* Turns off the double-tap zoom on iOS (pinch-zoom still works). */
@@ -150,11 +177,13 @@ button {
 
 @media (hover: hover) {
 	button:hover:not(:disabled) {
-		background: transparent;
+		background: var(--button-hover);
 	}
 
+	/* Filled buttons turn into an accent outline on hover, so their white label never sits on white. */
 	button.primary:hover:not(:disabled) {
 		background: transparent;
+		color: var(--accent);
 	}
 }
 

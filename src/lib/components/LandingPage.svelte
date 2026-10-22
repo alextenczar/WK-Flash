@@ -32,7 +32,13 @@
 		{
 			icon: 'progress',
 			title: 'JLPT analytics',
-			text: 'Coverage by JLPT level, an SRS heatmap, search across kanji and vocabulary, and a level-up forecast.',
+			text: 'Coverage by JLPT level, weakest items from your review stats, search across kanji and vocabulary, and a level-up forecast.',
+			wide: true
+		},
+		{
+			icon: 'theme',
+			title: 'Dark and light mode',
+			text: 'Dark mode is the default and easy on the eyes at night. Turn on light mode in Settings if you study in a bright room.',
 			wide: true
 		}
 	] as const;
@@ -60,7 +66,11 @@
 		{ level: 'N2', value: 31 },
 		{ level: 'N1', value: 12 }
 	];
-	const heatmap = [4, 5, 3, 4, 5, 2, 1, 3, 4, 5, 5, 3, 2, 4, 5, 3, 4, 2, 1, 3, 5, 4, 3, 2, 4, 5, 3, 4];
+	const weakestSample = [
+		{ glyph: '氏', meaning: 'Family name', rate: 58 },
+		{ glyph: '未', meaning: 'Not yet', rate: 64 },
+		{ glyph: '予', meaning: 'Beforehand', rate: 71 }
+	];
 </script>
 
 <Seo title={defaultTitle} description={defaultDescription} />
@@ -87,7 +97,7 @@
 				</h1>
 				<p class="lede">
 					WK Flash is built for speed: meaning and reading on one card, keyboard-first grading, and
-					analytics that show JLPT coverage, your SRS heatmap, and when you’ll level up.
+					analytics that show JLPT coverage, your weakest items, and when you’ll level up.
 				</p>
 				<div class="cta-row">
 					<a class="button primary" href="/settings">Connect WaniKani</a>
@@ -105,7 +115,7 @@
 					</div>
 					<div>
 						<dt>Live analytics</dt>
-						<dd>JLPT coverage, heatmap, level-up forecast</dd>
+						<dd>JLPT coverage, weakest items, level-up forecast</dd>
 					</div>
 				</dl>
 			</div>
@@ -249,6 +259,15 @@
 									stroke-linecap="round"
 								/>
 							</svg>
+						{:else if feature.icon === 'theme'}
+							<svg viewBox="0 0 24 24" fill="none">
+								<path
+									d="M20 14.2A8 8 0 0 1 9.8 4a8 8 0 1 0 10.2 10.2Z"
+									stroke="currentColor"
+									stroke-width="1.8"
+									stroke-linejoin="round"
+								/>
+							</svg>
 						{:else}
 							<svg viewBox="0 0 24 24" fill="none">
 								<path
@@ -272,7 +291,7 @@
 			<p class="section-eyebrow">Analytics</p>
 			<h2 id="analytics-heading">Know exactly where you stand</h2>
 			<p class="section-lede">
-				Track JLPT kanji and vocabulary by level, search across your progress, read an SRS heatmap, and
+				Track JLPT kanji and vocabulary by level, search across your progress, see your weakest items, and
 				see a level-up forecast based on your current reviews.
 			</p>
 			<div class="analytics-grid" aria-hidden="true">
@@ -291,13 +310,17 @@
 					</ul>
 				</article>
 				<article class="analytics-panel">
-					<h3>SRS heatmap <em>Sample</em></h3>
-					<div class="heatmap">
-						{#each heatmap as intensity, index (index)}
-							<span class="heat heat-{intensity}"></span>
+					<h3>Weakest items <em>Sample</em></h3>
+					<ul class="weakest-sample">
+						{#each weakestSample as item (item.glyph)}
+							<li>
+								<strong lang="ja">{item.glyph}</strong>
+								<span>{item.meaning}</span>
+								<b>{item.rate}%</b>
+							</li>
 						{/each}
-					</div>
-					<p>Daily review intensity over the last four weeks.</p>
+					</ul>
+					<p>Lowest lifetime accuracy from your WaniKani stats.</p>
 				</article>
 				<article class="analytics-panel forecast">
 					<h3>Level-up forecast <em>Sample</em></h3>
@@ -372,6 +395,10 @@
 		opacity: 0.55;
 	}
 
+	:global(:root[data-theme='light']) .orb {
+		opacity: 0.3;
+	}
+
 	.orb-a {
 		width: 32rem;
 		height: 32rem;
@@ -399,7 +426,7 @@
 
 	.floater {
 		position: absolute;
-		color: rgb(255 255 255 / 7%);
+		color: rgb(var(--contrast) / 7%);
 		font-size: clamp(2.4rem, 6vw, 4.5rem);
 		font-weight: 700;
 		line-height: 1;
@@ -479,7 +506,7 @@
 		padding: 0.85rem 1.45rem;
 		border: 1px solid var(--border);
 		border-radius: 999px;
-		background: rgb(24 24 27 / 70%);
+		background: color-mix(in srgb, var(--surface-alt) 70%, transparent);
 		color: var(--text);
 		font-weight: 600;
 		backdrop-filter: blur(8px);
@@ -518,7 +545,7 @@
 
 	.stat-row div {
 		padding-top: 0.85rem;
-		border-top: 1px solid rgb(255 255 255 / 10%);
+		border-top: 1px solid rgb(var(--contrast) / 10%);
 	}
 
 	.stat-row dt {
@@ -549,9 +576,13 @@
 		gap: 0.35rem;
 		width: 11.5rem;
 		padding: 1rem 1.1rem;
-		border: 1px solid rgb(255 255 255 / 10%);
+		border: 1px solid rgb(var(--contrast) / 10%);
 		border-radius: 22px;
-		background: linear-gradient(160deg, rgb(24 24 27 / 92%), rgb(9 9 11 / 96%));
+		background: linear-gradient(
+			160deg,
+			color-mix(in srgb, var(--card-start) 92%, transparent),
+			color-mix(in srgb, var(--card-end) 96%, transparent)
+		);
 		box-shadow: 0 24px 50px -24px rgb(0 0 0 / 80%);
 	}
 
@@ -606,9 +637,13 @@
 		position: relative;
 		width: 100%;
 		height: 100%;
-		border: 1px solid rgb(255 255 255 / 10%);
+		border: 1px solid rgb(var(--contrast) / 10%);
 		border-radius: 22px;
-		background: linear-gradient(160deg, rgb(24 24 27 / 98%), rgb(9 9 11 / 98%));
+		background: linear-gradient(
+			160deg,
+			color-mix(in srgb, var(--card-start) 98%, transparent),
+			color-mix(in srgb, var(--card-end) 98%, transparent)
+		);
 		box-shadow: 0 24px 50px -24px rgb(0 0 0 / 80%);
 		transform-style: preserve-3d;
 		animation: flip 7.5s ease-in-out infinite;
@@ -621,7 +656,11 @@
 		flex-direction: column;
 		padding: 1.3rem;
 		border-radius: 22px;
-		background: linear-gradient(160deg, rgb(24 24 27 / 98%), rgb(9 9 11 / 98%));
+		background: linear-gradient(
+			160deg,
+			color-mix(in srgb, var(--card-start) 98%, transparent),
+			color-mix(in srgb, var(--card-end) 98%, transparent)
+		);
 		backface-visibility: hidden;
 		-webkit-backface-visibility: hidden;
 	}
@@ -721,7 +760,7 @@
 		border-top: 1px solid var(--border);
 		border-bottom: 1px solid var(--border);
 		background:
-			linear-gradient(180deg, rgb(255 255 255 / 2%), transparent 40%),
+			linear-gradient(180deg, rgb(var(--contrast) / 2%), transparent 40%),
 			var(--surface);
 	}
 
@@ -750,6 +789,10 @@
 
 	.compare-col.faded {
 		opacity: 0.72;
+	}
+
+	:global(:root[data-theme='light']) .compare-col.faded {
+		opacity: 0.9;
 	}
 
 	.compare-col figcaption {
@@ -869,22 +912,34 @@
 		background: linear-gradient(90deg, #2563eb, #7c3aed);
 	}
 
-	.heatmap {
+	.weakest-sample {
 		display: grid;
-		grid-template-columns: repeat(7, 1fr);
-		gap: 0.35rem;
+		gap: 0.55rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
 	}
 
-	.heat {
-		aspect-ratio: 1;
-		border-radius: 4px;
-		background: rgb(59 130 246 / 12%);
+	.weakest-sample li {
+		display: grid;
+		grid-template-columns: 1.6rem 1fr auto;
+		align-items: center;
+		gap: 0.65rem;
+		font-size: 0.85rem;
 	}
 
-	.heat-2 { background: rgb(59 130 246 / 28%); }
-	.heat-3 { background: rgb(59 130 246 / 48%); }
-	.heat-4 { background: rgb(99 102 241 / 70%); }
-	.heat-5 { background: #7c3aed; }
+	.weakest-sample strong {
+		font-size: 1.15rem;
+	}
+
+	.weakest-sample span {
+		color: var(--muted);
+	}
+
+	.weakest-sample b {
+		color: #c084fc;
+		font-variant-numeric: tabular-nums;
+	}
 
 	.forecast strong {
 		display: block;

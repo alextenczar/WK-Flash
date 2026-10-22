@@ -1,7 +1,12 @@
 import { browser } from '$app/environment';
 import type { ReviewCard, WKAssignment, WKLevelProgression, WKReviewStatistic, WKSubject, WKUser } from './types';
-import { calculateDailyReviewActivity, type DailyReviewActivity } from './daily-review-activity';
 import { primaryMeaning, subjectImageUrl } from './matching';
+import {
+	WEAKEST_PERCENTAGE_LESS_THAN,
+	rankWeakestStatistics,
+	weakestItemsFromStatistics,
+	type WeakestItem
+} from './weakest-items';
 
 const BASE_URL = 'https://api.wanikani.com/v2';
 const SUBJECT_CACHE_NAME = 'wk-flash-wanikani-subjects-v1';
@@ -39,7 +44,7 @@ export interface CachedReviewQueue {
 	reviewCount?: number;
 	nextReviewBatch?: NextReviewBatch | null;
 	upcomingReviewBatches?: NextReviewBatch[];
-	dailyReviewActivity?: DailyReviewActivity | null;
+	weakestItems?: WeakestItem[] | null;
 	user: WKUser;
 }
 
@@ -201,10 +206,9 @@ export async function getCachedReviewQueue(): Promise<CachedReviewQueue | null> 
 						Array.isArray(batch.subjectIds) &&
 						batch.subjectIds.every((id) => Number.isInteger(id) && id > 0)
 					))) ||
-			(snapshot.dailyReviewActivity !== undefined &&
-				snapshot.dailyReviewActivity !== null &&
-				(!Number.isInteger(snapshot.dailyReviewActivity.count) ||
-					snapshot.dailyReviewActivity.count < 0))
+			(snapshot.weakestItems !== undefined &&
+				snapshot.weakestItems !== null &&
+				!isCachedWeakestItems(snapshot.weakestItems))
 		) {
 			return null;
 		}
@@ -212,6 +216,25 @@ export async function getCachedReviewQueue(): Promise<CachedReviewQueue | null> 
 	} catch {
 		return null;
 	}
+}
+
+function isCachedWeakestItems(value: unknown): value is WeakestItem[] {
+	return (
+		Array.isArray(value) &&
+		value.every(
+			(item) =>
+				Number.isInteger(item?.subjectId) &&
+				item.subjectId > 0 &&
+				typeof item.subject?.data === 'object' &&
+				Number.isInteger(item.incorrect) &&
+				item.incorrect >= 0 &&
+				Number.isInteger(item.total) &&
+				item.total > 0 &&
+				Number.isInteger(item.accuracyPercent) &&
+				item.accuracyPercent >= 0 &&
+				item.accuracyPercent <= 100
+		)
+	);
 }
 
 export async function clearCachedReviewQueue(): Promise<void> {
@@ -229,21 +252,19 @@ async function cacheReviewQueue(
 	user: WKUser,
 	reviewCount: number,
 	nextReviewBatch?: NextReviewBatch | null,
-	dailyReviewActivity?: DailyReviewActivity | null,
+	weakestItems?: WeakestItem[] | null,
 	upcomingReviewBatches?: NextReviewBatch[]
 ): Promise<void> {
 	const cache = await openSubjectCache();
 	if (!cache) return;
 	try {
 		const previous = nextReviewBatch === undefined ||
-			dailyReviewActivity === undefined ||
+			weakestItems === undefined ||
 			upcomingReviewBatches === undefined
 			? await getCachedReviewQueue()
 			: null;
 		const cachedNextReviewBatch = nextReviewBatch === undefined ? previous?.nextReviewBatch : nextReviewBatch;
-		const cachedDailyReviewActivity = dailyReviewActivity === undefined
-			? previous?.dailyReviewActivity
-			: dailyReviewActivity;
+		const cachedWeakestItems = weakestItems === undefined ? previous?.weakestItems : weakestItems;
 		const cachedUpcomingReviewBatches = upcomingReviewBatches === undefined
 			? previous?.upcomingReviewBatches
 			: upcomingReviewBatches;
@@ -255,7 +276,7 @@ async function cacheReviewQueue(
 				reviewCount,
 				user,
 				...(cachedNextReviewBatch !== undefined ? { nextReviewBatch: cachedNextReviewBatch } : {}),
-				...(cachedDailyReviewActivity !== undefined ? { dailyReviewActivity: cachedDailyReviewActivity } : {}),
+				...(cachedWeakestItems !== undefined ? { weakestItems: cachedWeakestItems } : {}),
 				...(cachedUpcomingReviewBatches !== undefined
 					? { upcomingReviewBatches: cachedUpcomingReviewBatches }
 					: {})
@@ -742,7 +763,7 @@ export async function getReviewOverview(apiToken: string): Promise<{
 	cards: ReviewCard[];
 	nextReviewBatch: NextReviewBatch | null | undefined;
 	upcomingReviewBatches: NextReviewBatch[] | undefined;
-	dailyReviewActivity: DailyReviewActivity | null;
+	weakestItems: WeakestItem[] | null;
 	currentLevelKanji: {
 		id: number;
 		character: string;
@@ -753,9 +774,9 @@ export async function getReviewOverview(apiToken: string): Promise<{
 	}[] | null;
 	currentLevelRadicals: LevelRadical[] | null;
 }> {
-	const [reviewData, dailyReviewActivity] = await Promise.all([
+	const [reviewData, weakestItems] = await Promise.all([
 		getAccessibleReviewData(apiToken),
-		getTodayReviewActivity(apiToken)
+		getWeakestItems(apiToken)
 	]);
 	const { user, assignments, reviewCount, upcoming: upcomingReviewBatches, subjectById, maxAccessibleLevel } = reviewData;
 	let currentLevelKanji: {
@@ -801,7 +822,7 @@ export async function getReviewOverview(apiToken: string): Promise<{
 		user,
 		reviewCount,
 		nextReviewBatch,
-		dailyReviewActivity,
+		weakestItems,
 		cachedUpcomingReviewBatches
 	);
 	return {
@@ -810,23 +831,32 @@ export async function getReviewOverview(apiToken: string): Promise<{
 		cards,
 		nextReviewBatch,
 		upcomingReviewBatches: cachedUpcomingReviewBatches,
-		dailyReviewActivity,
+		weakestItems,
 		currentLevelKanji,
 		currentLevelRadicals
 	};
 }
 
-/** Counts today’s completed reviews using the same review-history fallback as Analytics. */
-export async function getTodayReviewActivity(apiToken: string): Promise<DailyReviewActivity | null> {
-	const updatedAfter = new Date();
-	updatedAfter.setHours(0, 0, 0, 0);
-	const filter = encodeURIComponent(updatedAfter.toISOString());
+/**
+ * Lowest lifetime-accuracy items from WaniKani review statistics.
+ * Uses percentages_less_than so the API only returns struggling subjects.
+ */
+export async function getWeakestItems(
+	apiToken: string,
+	maxAccessibleLevel?: number
+): Promise<WeakestItem[] | null> {
 	try {
-		const [assignments, reviewStatistics] = await Promise.all([
-			wkFetchAllPages<WKAssignment>(`/assignments?updated_after=${filter}`, apiToken).catch(() => []),
-			wkFetchAllPages<WKReviewStatistic>(`/review_statistics?updated_after=${filter}`, apiToken).catch(() => null)
-		]);
-		return calculateDailyReviewActivity(assignments, reviewStatistics);
+		const statistics = await wkFetchAllPages<WKReviewStatistic>(
+			`/review_statistics?percentages_less_than=${WEAKEST_PERCENTAGE_LESS_THAN}`,
+			apiToken
+		);
+		const ranked = rankWeakestStatistics(statistics);
+		const subjects = await getSubjectsByIds(
+			apiToken,
+			ranked.map((statistic) => statistic.data.subject_id),
+			maxAccessibleLevel
+		);
+		return weakestItemsFromStatistics(statistics, subjects);
 	} catch {
 		return null;
 	}

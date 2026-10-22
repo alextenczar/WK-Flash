@@ -2,7 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
-	import { keybindings } from '$lib/keybindings';
+	import { gamepadBindings, gamepadButtonLabel, keybindings } from '$lib/keybindings';
+	import { gamepadConnected, startGamepadPolling } from '$lib/gamepad';
 	import { playPronunciation, reviewAudioSettings } from '$lib/review-audio';
 	import { showMnemonics, showPartsOfSpeech } from '$lib/review-preferences';
 	import { pendingLessonStarts, startQueuedLesson } from '$lib/lesson-outbox';
@@ -101,6 +102,21 @@
 			if (phase === 'review') grade(false);
 		}
 	}
+
+	/** Same actions as the keyboard shortcuts, triggered by a controller button. */
+	function handleGamepadButton(button: number) {
+		if (!current) return;
+		if (!revealed && button === $gamepadBindings.flip) {
+			reveal();
+		} else if (revealed && button === $gamepadBindings.correct) {
+			if (phase === 'learning') next();
+			else grade(true);
+		} else if (revealed && phase === 'review' && button === $gamepadBindings.wrong) {
+			grade(false);
+		}
+	}
+
+	onMount(() => startGamepadPolling(handleGamepadButton));
 
 	function next() {
 		resetMoreInfo();
@@ -208,6 +224,12 @@
 				<p class="muted">
 					{phase === 'learning' ? `Learning ${index + 1} / ${cards.length}` : `${reviewQueue.length} left to confirm`}
 				</p>
+				{#if $gamepadConnected}
+					<p class="muted gamepad-status" title={$gamepadConnected}>
+						Controller connected: flip {gamepadButtonLabel($gamepadBindings.flip)}, correct
+						{gamepadButtonLabel($gamepadBindings.correct)}, wrong {gamepadButtonLabel($gamepadBindings.wrong)}
+					</p>
+				{/if}
 			</div>
 			<div class="session-actions">
 				<a href="/lessons"><button class="finish-missed" type="button">Exit</button></a>

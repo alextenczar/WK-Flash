@@ -8,7 +8,7 @@ WK Flash combines meaning and reading prompts on one review card. It sends revie
 
 - Review meaning and reading together on one card to cut review volume in half.
 - Keyboard and game controller controls that work out of the box.
-- JLPT coverage, SRS heatmap, search, and a level-up forecast.
+- JLPT coverage, weakest items from review stats, search, and a level-up forecast.
 - Resume an in-progress review offline; answers sync when the connection returns.
 - Sort reviews by SRS, level, or type, and prioritize the current WaniKani level.
 

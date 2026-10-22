@@ -3,6 +3,8 @@
 	import { page } from '$app/state';
 	import '$lib/app.css';
 	import { initPersistentStorage } from '$lib/persistent-storage';
+	// Applies the saved light/dark theme to <html> on every page.
+	import '$lib/theme';
 	import { isPublicPath } from '$lib/seo';
 	import { apiKey } from '$lib/storage';
 	import { syncPendingLessonStarts } from '$lib/lesson-outbox';
@@ -114,7 +116,7 @@
 			display: inline-flex;
 			align-items: center;
 			min-height: 2.15rem;
-			color: white;
+			color: var(--text);
 			text-decoration: none;
 		}
 	}
@@ -137,15 +139,15 @@
 		color: var(--text);
 	}
 
-	.connect {
+	.links a.connect {
 		padding: 0.35rem 0.8rem;
 		border-radius: 999px;
 		background: linear-gradient(120deg, #2563eb, #7c3aed);
 		color: #fff;
 	}
 
-	.connect:hover,
-	.connect:focus-visible {
+	.links a.connect:hover,
+	.links a.connect:focus-visible {
 		text-decoration: none;
 		color: #fff;
 	}

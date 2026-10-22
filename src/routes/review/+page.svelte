@@ -973,7 +973,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	.radical-image {
 		width: 64px;
 		height: 64px;
-		filter: invert(1);
+		filter: invert(var(--image-invert));
 	}
 
 	.subject-type {
@@ -1163,16 +1163,16 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	}
 
 	.mnemonic :global(radical) {
-		background: rgba(255, 255, 255, 0.1);
+		background: rgb(var(--contrast) / 10%);
 	}
 
 	.mnemonic :global(kanji) {
-		background: rgba(255, 255, 255, 0.16);
+		background: rgb(var(--contrast) / 16%);
 	}
 
 	.mnemonic :global(vocabulary),
 	.mnemonic :global(reading) {
-		background: rgba(255, 255, 255, 0.08);
+		background: rgb(var(--contrast) / 8%);
 	}
 
 	.grade-buttons {
@@ -1198,6 +1198,18 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		background: var(--bad);
 		border-color: var(--bad);
 		color: #fff;
+	}
+
+	@media (hover: hover) {
+		.correct:hover:not(:disabled) {
+			background: transparent;
+			color: var(--good);
+		}
+
+		.wrong:hover:not(:disabled) {
+			background: transparent;
+			color: var(--bad);
+		}
 	}
 
 	@media (min-width: 768px) {

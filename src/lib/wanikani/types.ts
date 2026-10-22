@@ -83,13 +83,13 @@ export interface WKReviewStatistic {
 	data: {
 		subject_id: number;
 		hidden?: boolean;
+		percentage_correct?: number | null;
 		meaning_correct?: number | null;
 		meaning_incorrect?: number | null;
 		reading_correct?: number | null;
 		reading_incorrect?: number | null;
 	};
 }
-
 
 export interface WKLevelProgression {
 	id: number;

@@ -36,7 +36,7 @@ export function webAppJsonLd(origin: string) {
 		featureList: [
 			'Combined meaning and reading reviews on one flashcard',
 			'Keyboard and game controller controls that work out of the box',
-			'JLPT coverage, SRS heatmap, and level-up forecast',
+			'JLPT coverage, weakest items, and level-up forecast',
 			'Offline review sessions with automatic sync',
 			'Review session recovery stored in the browser'
 		],
