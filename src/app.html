@@ -54,6 +54,15 @@
 			} catch {
 				// Storage can be blocked; the default dark theme applies.
 			}
+			// Flag signed-in browsers before first paint so the server-rendered landing page is never shown to them.
+			// The layout removes this flag once the app hydrates. Keep the key in sync with the API key store in src/lib/storage.ts.
+			try {
+				if (localStorage.getItem('wk-flash:api-key')) {
+					document.documentElement.dataset.signedIn = 'true';
+				}
+			} catch {
+				// Storage can be blocked; the landing page stays visible until the app decides.
+			}
 		</script>
 		%sveltekit.head%
 	</head>

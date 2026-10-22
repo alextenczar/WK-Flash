@@ -334,7 +334,9 @@
 <svelte:window onclick={dismissKanjiPopup} />
 
 {#if !clientReady || !$apiKey}
-	<LandingPage />
+	<div class="guest-only">
+		<LandingPage />
+	</div>
 {:else}
 <div class="container">
 	{#if loading}
@@ -574,6 +576,11 @@
 {/if}
 
 <style>
+	/* The app.html script sets data-signed-in before first paint, so signed-in users never see the landing page. */
+	:global(html[data-signed-in]) .guest-only {
+		display: none;
+	}
+
 	.next-review-batch {
 		margin-left: 0.35rem;
 		color: var(--muted);

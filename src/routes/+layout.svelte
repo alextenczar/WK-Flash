@@ -14,6 +14,9 @@
 	let isOnline = $state(true);
 
 	onMount(() => {
+		// The pre-paint sign-in flag from app.html only needs to hide the landing page until the app hydrates.
+		// After that, the page's own key check decides what to show.
+		delete document.documentElement.dataset.signedIn;
 		void initPersistentStorage();
 		const updateConnection = () => {
 			isOnline = navigator.onLine;
