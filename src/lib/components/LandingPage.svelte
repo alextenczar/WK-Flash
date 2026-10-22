@@ -32,14 +32,12 @@
 		{
 			icon: 'progress',
 			title: 'JLPT analytics',
-			text: 'Coverage by JLPT level, weakest items from your review stats, search across kanji and vocabulary, and a level-up forecast.',
-			wide: true
+			text: 'Coverage by JLPT level, weakest items from your review stats, search across kanji and vocabulary, and a level-up forecast.'
 		},
 		{
 			icon: 'theme',
 			title: 'Dark and light mode',
-			text: 'Dark mode is the default and easy on the eyes at night. Turn on light mode in Settings if you study in a bright room.',
-			wide: true
+			text: 'Dark mode is the default and easy on the eyes at night. Turn on light mode in Settings if you study in a bright room.'
 		}
 	] as const;
 
