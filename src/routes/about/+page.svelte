@@ -1,10 +1,9 @@
-<svelte:head>
-	<title>About WK Flash</title>
-	<meta
-		name="description"
-		content="WK Flash is an unofficial third-party study app for WaniKani users, combining meaning and reading reviews on one card to help cut review time in half."
-	/>
-</svelte:head>
+<script lang="ts">
+	import Seo from '$lib/components/Seo.svelte';
+	import { aboutDescription } from '$lib/seo';
+</script>
+
+<Seo title="About WK Flash | Unofficial WaniKani study app" description={aboutDescription} />
 
 <div class="container about-content">
 	<h1>About WK Flash</h1>

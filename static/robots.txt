@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /review
-Disallow: /settings
