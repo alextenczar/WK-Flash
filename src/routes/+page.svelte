@@ -4,6 +4,7 @@
 	import { apiKey } from '$lib/storage';
 	import { readPersistent, writePersistent, whenPersistentStorageReady } from '$lib/persistent-storage';
 	import { hasSavedReviewSession } from '$lib/review-session';
+	import LandingPage from '$lib/components/LandingPage.svelte';
 	import { pendingReviews } from '$lib/review-outbox';
 	import {
 		getCachedReviewQueue,
@@ -56,6 +57,8 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 	let hasCachedReviewQueue = $state(false);
 	let loading = $state(true);
 	let error = $state('');
+	// False on the server and during hydrate so crawlers get the landing page HTML.
+	let clientReady = $state(false);
 	let loadingRequest = false;
 	let refreshedForBatch: string | null = null;
 
@@ -149,6 +152,7 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 	}
 
 	onMount(() => {
+		clientReady = true;
 		const handleOnline = () => void load(true);
 		const countdownTimer = window.setInterval(() => {
 			now = Date.now();
@@ -183,10 +187,7 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 			if (availableCards && (reviewCount === null || !navigator.onLine)) {
 				reviewCount = availableCards.length;
 			}
-			if (!$apiKey) {
-				goto('/settings');
-				return;
-			}
+			if (!$apiKey) return;
 			if (!navigator.onLine) {
 				error = hasSavedReview
 					? 'You are offline. Your saved review is ready to continue.'
@@ -326,6 +327,9 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 
 <svelte:window onclick={dismissKanjiPopup} />
 
+{#if !clientReady || !$apiKey}
+	<LandingPage />
+{:else}
 <div class="container">
 	{#if loading}
 		<p>
@@ -514,6 +518,7 @@ import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 		{/if}
 	{/if}
 </div>
+{/if}
 
 <style>
 	.next-review-batch {

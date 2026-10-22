@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import '$lib/app.css';
 	import { initPersistentStorage } from '$lib/persistent-storage';
+	import { isPublicPath } from '$lib/seo';
 	import { apiKey } from '$lib/storage';
 	import { syncPendingLessonStarts } from '$lib/lesson-outbox';
 	import { pendingReviews, syncPendingReviews } from '$lib/review-outbox';
@@ -46,6 +48,9 @@
 	<meta name="apple-mobile-web-app-capable" content="yes" />
 	<meta name="apple-mobile-web-app-title" content="WK Flash" />
 	<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+	{#if !isPublicPath(page.url.pathname)}
+		<meta name="robots" content="noindex, nofollow" />
+	{/if}
 </svelte:head>
 
 <header>
@@ -55,9 +60,12 @@
 			{#if $apiKey}
 				<a href="/lessons">Lessons</a>
 				<a href="/analytics">Analytics</a>
+				<a href="/settings">Settings</a>
+				<a href="/about">About</a>
+			{:else}
+				<a href="/about">About</a>
+				<a class="connect" href="/settings">Connect</a>
 			{/if}
-			<a href="/settings">Settings</a>
-			<a href="/about">About</a>
 		</div>
 	</nav>
 </header>
@@ -100,8 +108,12 @@
 
 	.links {
 		display: flex;
-		gap: 1.25rem;
+		align-items: center;
+		gap: 0.75rem;
 		a {
+			display: inline-flex;
+			align-items: center;
+			min-height: 2.15rem;
 			color: white;
 			text-decoration: none;
 		}
@@ -123,5 +135,18 @@
 		font-size: 1.1rem;
 		text-decoration: none;
 		color: var(--text);
+	}
+
+	.connect {
+		padding: 0.35rem 0.8rem;
+		border-radius: 999px;
+		background: linear-gradient(120deg, #2563eb, #7c3aed);
+		color: #fff;
+	}
+
+	.connect:hover,
+	.connect:focus-visible {
+		text-decoration: none;
+		color: #fff;
 	}
 </style>
