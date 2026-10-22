@@ -129,7 +129,9 @@ export function requeueOffset(
 	if (prioritizeLevel) {
 		const currentCount = rest.filter(isCurrentLevelCard).length;
 		if (isCurrentLevelCard(card)) {
-			end = currentCount;
+			// Keep a missed current-level card inside the current-level block. When no current-level
+			// cards are left, it moves through the other levels instead of being shown again at once.
+			if (currentCount > 0) end = currentCount;
 		} else {
 			start = currentCount;
 		}
