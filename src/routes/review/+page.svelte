@@ -371,8 +371,22 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		return stopGamepad;
 	});
 
+	/**
+	 * Runs when the page is hidden or closed. Sends the held answer now, so other devices stop
+	 * showing it as due, then saves the session so the review can be resumed.
+	 */
 	function onPageHide() {
-		if (!endingReview) saveCurrentSession();
+		if (endingReview) return;
+		if (pendingReviewSubmission) {
+			void commitPendingReview();
+			// The answer is already sent, so it can no longer be undone on return.
+			undoSnapshot = null;
+		}
+		saveCurrentSession();
+	}
+
+	function onVisibilityChange() {
+		if (document.visibilityState === 'hidden') onPageHide();
 	}
 
 	function flip() {
@@ -607,6 +621,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 </script>
 
 <svelte:window onkeydown={handleKeydown} onpagehide={onPageHide} />
+<svelte:document onvisibilitychange={onVisibilityChange} />
 
 <div class="container review-container">
 	{#if phase === 'loading'}
