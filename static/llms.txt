@@ -16,6 +16,11 @@ WK Flash combines meaning and reading prompts on one review card. It sends revie
 
 - `/`: Marketing homepage and, after connecting a token, the review dashboard.
 - `/about`: Project description, features, and unofficial-status notice.
+- `/how-it-works`: Step-by-step guide to connecting a WaniKani token and running reviews.
+- `/jlpt-coverage`: JLPT kanji coverage by WaniKani level, from static curriculum data. No account needed.
+- `/jlpt`: Index of JLPT N5 to N1 kanji and vocabulary lists.
+- `/jlpt/<level>/kanji` and `/jlpt/<level>/vocabulary` (level is `n5` … `n1`): Kanji and vocabulary lists for each JLPT level, with meanings and readings.
+- `/jlpt/kanji/<character>`: Meaning, readings, WaniKani level, and example JLPT vocabulary for a single kanji.
 
 ## App pages (not for indexing)
 

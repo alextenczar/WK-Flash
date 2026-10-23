@@ -5,6 +5,8 @@
 	import { readPersistent, writePersistent, whenPersistentStorageReady } from '$lib/persistent-storage';
 	import { hasSavedReviewSession } from '$lib/review-session';
 	import LandingPage from '$lib/components/LandingPage.svelte';
+	import Seo from '$lib/components/Seo.svelte';
+	import { defaultDescription, defaultTitle } from '$lib/seo';
 	import { pendingReviews } from '$lib/review-outbox';
 	import {
 		getCachedReviewQueue,
@@ -332,6 +334,11 @@
 </script>
 
 <svelte:window onclick={dismissKanjiPopup} />
+
+<Seo
+	title={$apiKey && clientReady ? 'Home · WK Flash' : defaultTitle}
+	description={defaultDescription}
+/>
 
 {#if !clientReady || !$apiKey}
 	<div class="guest-only">

@@ -12,6 +12,7 @@
 
 	let { children } = $props();
 	let isOnline = $state(true);
+	const jlptLevels = ['n5', 'n4', 'n3', 'n2', 'n1'];
 
 	onMount(() => {
 		// The pre-paint sign-in flag from app.html only needs to hide the landing page until the app hydrates.
@@ -60,7 +61,12 @@
 
 <header>
 	<nav class="container">
-		<a href="/" class="brand">WK Flash</a>
+		<a href="/" class="brand">
+			<svg class="brand-mark" viewBox="145 72 282 368" aria-hidden="true" focusable="false">
+				<path d="M286 72 145 279h98l-17 161 141-226h-98l17-142Z" fill="currentColor" />
+			</svg>
+			WK Flash
+		</a>
 		<div class="links">
 			{#if $apiKey}
 				<a href="/lessons">Lessons</a>
@@ -68,6 +74,7 @@
 				<a href="/settings">Settings</a>
 				<a href="/about">About</a>
 			{:else}
+				<a href="/how-it-works">How it works</a>
 				<a href="/about">About</a>
 				<a class="connect" href="/settings">Connect</a>
 			{/if}
@@ -88,6 +95,62 @@
 <main>
 	{@render children()}
 </main>
+
+<footer class="site-footer">
+	<div class="container">
+		<nav class="footer-links" aria-label="Footer">
+			<div>
+				<h2>App</h2>
+				<ul>
+					{#if $apiKey}
+						<li><a href="/review">Review</a></li>
+						<li><a href="/lessons">Lessons</a></li>
+					{:else}
+						<li><a href="/settings">Connect</a></li>
+					{/if}
+					<li><a href="/about">About</a></li>
+					<li><a href="/how-it-works">How it works</a></li>
+				</ul>
+			</div>
+			{#if $apiKey}
+				<div>
+					<h2>Analytics</h2>
+					<ul>
+						<li><a href="/analytics">Overview</a></li>
+						<li><a href="/analytics#level-up-heading">Level-up calculator</a></li>
+						<li><a href="/analytics/kanji">Kanji heatmap</a></li>
+						<li><a href="/analytics#jlpt-vocabulary-heading">JLPT vocabulary</a></li>
+						<li><a href="/analytics/results">JLPT results</a></li>
+					</ul>
+				</div>
+			{/if}
+			<div>
+				<h2>JLPT</h2>
+				<ul>
+					<li><a href="/jlpt">All levels</a></li>
+					<li class="jlpt-levels">
+						{#each jlptLevels as level, index (level)}
+							<a href="/jlpt/{level}/kanji">{level.toUpperCase()}</a>{index < jlptLevels.length - 1 ? ', ' : ''}
+						{/each}
+					</li>
+					<li><a href="/jlpt-coverage">WaniKani coverage</a></li>
+				</ul>
+			</div>
+			<div>
+				<h2>Settings</h2>
+				<ul>
+					<li><a href="/settings">Settings</a></li>
+					<li><a href="/settings#appearance-heading">Appearance</a></li>
+					<li><a href="/settings#keybindings">Keyboard and controller</a></li>
+				</ul>
+			</div>
+		</nav>
+		<p class="disclaimer">
+			WK Flash is an unofficial, independent project. It is not made, owned, approved, or endorsed by WaniKani
+			or Tofugu. WaniKani and its content, names, and artwork belong to their respective owners.
+		</p>
+	</div>
+</footer>
 
 <style>
 	.connection-status {
@@ -136,10 +199,67 @@
 	}
 
 	.brand {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
 		font-weight: 700;
 		font-size: 1.1rem;
 		text-decoration: none;
 		color: var(--text);
+	}
+
+	.site-footer {
+		margin-top: 3rem;
+		padding: 2rem 0 3rem;
+		border-top: 1px solid var(--border);
+	}
+
+	.footer-links {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(10rem, 14rem));
+		justify-content: start;
+		align-items: start;
+		gap: 2rem 3rem;
+	}
+
+	.footer-links h2 {
+		margin: 0 0 0.5rem;
+		color: var(--muted);
+		font-size: 0.85rem;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+	}
+
+	.footer-links ul {
+		display: grid;
+		gap: 0.35rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.footer-links a {
+		color: var(--text);
+		text-decoration: none;
+	}
+
+	.footer-links a:hover,
+	.footer-links a:focus-visible {
+		color: var(--accent);
+		text-decoration: underline;
+	}
+
+	.disclaimer {
+		margin: 2rem 0 0;
+		color: var(--muted);
+		font-size: 0.85rem;
+		line-height: 1.6;
+	}
+
+	.brand-mark {
+		width: 1.15em;
+		height: 1.55em;
+		flex: none;
 	}
 
 	.links a.connect {

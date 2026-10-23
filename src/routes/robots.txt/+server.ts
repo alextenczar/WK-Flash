@@ -1,12 +1,16 @@
+import { siteOrigin } from '$lib/seo';
 import type { RequestHandler } from './$types';
 
 export const prerender = false;
 
 export const GET: RequestHandler = ({ url }) => {
-	const sitemap = new URL('/sitemap.xml', url.origin).href;
+	const sitemap = new URL('/sitemap.xml', siteOrigin(url.origin)).href;
 	const body = `User-agent: *
 Allow: /
 Allow: /about
+Allow: /jlpt
+Allow: /jlpt-coverage
+Allow: /how-it-works
 Disallow: /review
 Disallow: /settings
 Disallow: /lessons

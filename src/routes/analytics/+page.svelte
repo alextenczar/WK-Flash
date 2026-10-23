@@ -274,7 +274,7 @@
 			<strong>Kanji heatmap</strong>
 			<span>Explore every kanji by JLPT level, WaniKani level, or SRS stage.</span>
 		</a>
-		<a href="/analytics/coverage">
+		<a href="/jlpt-coverage">
 			<strong>JLPT coverage</strong>
 			<span>See when each JLPT kanji set appears across WaniKani levels.</span>
 		</a>

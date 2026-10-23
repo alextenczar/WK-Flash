@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { absoluteUrl, defaultDescription, isPublicPath, siteName } from '$lib/seo';
+	import { absoluteUrl, defaultDescription, isPublicPath, siteName, siteOrigin } from '$lib/seo';
 
 	let {
 		title,
@@ -11,9 +11,9 @@
 	} = $props();
 
 	const path = $derived(page.url.pathname);
-	const origin = $derived(page.url.origin);
+	const origin = $derived(siteOrigin(page.url.origin));
 	const url = $derived(absoluteUrl(origin, path));
-	const image = $derived(absoluteUrl(origin, '/wk-flash-icon.svg'));
+	const image = $derived(absoluteUrl(origin, '/og-image.png'));
 	const indexable = $derived(isPublicPath(path));
 </script>
 

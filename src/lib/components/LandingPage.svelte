@@ -1,7 +1,4 @@
 <script lang="ts">
-	import Seo from '$lib/components/Seo.svelte';
-	import { defaultDescription, defaultTitle } from '$lib/seo';
-
 	const features = [
 		{
 			icon: 'cards',
@@ -71,8 +68,6 @@
 	];
 </script>
 
-<Seo title={defaultTitle} description={defaultDescription} />
-
 <div class="landing">
 	<section class="hero">
 		<div class="aurora" aria-hidden="true">
@@ -99,7 +94,7 @@
 				</p>
 				<div class="cta-row">
 					<a class="button primary" href="/settings">Connect WaniKani</a>
-					<a class="button" href="/about">How it works</a>
+					<a class="button" href="/how-it-works">How it works</a>
 				</div>
 				<p class="fine-print">Your API token is stored only in this browser. No password, no account.</p>
 				<dl class="stat-row">
@@ -355,12 +350,6 @@
 		</p>
 	</section>
 
-	<footer class="container landing-footer">
-		<p>
-			WK Flash is an unofficial, independent project. It is not made, owned, approved, or endorsed by WaniKani
-			or Tofugu. WaniKani and its content, names, and artwork belong to their respective owners.
-		</p>
-	</footer>
 </div>
 
 <style>
@@ -1051,19 +1040,6 @@
 		color: var(--muted);
 		font-size: 0.9rem;
 		text-align: center;
-	}
-
-	.landing-footer {
-		padding-top: 2rem;
-		padding-bottom: 3rem;
-		border-top: 1px solid var(--border);
-	}
-
-	.landing-footer p {
-		margin: 0;
-		color: var(--muted);
-		font-size: 0.85rem;
-		line-height: 1.6;
 	}
 
 	@keyframes drift {

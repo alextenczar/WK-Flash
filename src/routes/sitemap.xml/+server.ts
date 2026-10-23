@@ -1,13 +1,15 @@
-import { publicPaths } from '$lib/seo';
+import { publicPaths, siteOrigin } from '$lib/seo';
+import { jlptSitemapPaths } from '$lib/jlpt-pages';
 import type { RequestHandler } from './$types';
 
 export const prerender = false;
 
 export const GET: RequestHandler = ({ url }) => {
-	const origin = url.origin;
+	const origin = siteOrigin(url.origin);
+	const paths: string[] = [...publicPaths, ...jlptSitemapPaths()];
 	const body = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${publicPaths
+${paths
 	.map(
 		(path) => `  <url>
     <loc>${new URL(path, origin).href}</loc>

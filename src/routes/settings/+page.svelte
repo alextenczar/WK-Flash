@@ -117,6 +117,10 @@
 	}
 </script>
 
+<svelte:head>
+	<title>Settings · WK Flash</title>
+</svelte:head>
+
 <div class="container">
 	<h1>Settings</h1>
 	<p>
