@@ -99,12 +99,41 @@ export function kanjiSetSize(level: JLPTLevel): number {
 	return kanjiSetByLevel.get(level)!.length;
 }
 
+/** WaniKani levels sort ascending, with items that have no level last. */
+function byWkLevel<T extends { wkLevel: number | null }>(a: T, b: T): number {
+	if (a.wkLevel === b.wkLevel) return 0;
+	if (a.wkLevel === null) return 1;
+	if (b.wkLevel === null) return -1;
+	return a.wkLevel - b.wkLevel;
+}
+
 export function kanjiForLevel(level: JLPTLevel): KanjiListItem[] {
-	return kanjiSetByLevel.get(level)!.map(kanjiListItem);
+	return kanjiSetByLevel.get(level)!.map(kanjiListItem).sort(byWkLevel);
 }
 
 export function vocabularyForLevel(level: JLPTLevel): VocabularyItem[] {
 	return vocabulary.filter((entry) => entry.levels.includes(level));
+}
+
+export interface VocabularyListItem extends VocabularyItem {
+	/** Highest WaniKani level among the word's kanji. An estimate, since the word list has no WaniKani vocabulary levels. */
+	wkLevel: number | null;
+}
+
+/** Highest WaniKani level among a word's kanji, or null when none of its kanji are on WaniKani (for example, kana-only words). */
+function vocabularyWkLevel(entry: VocabularyItem): number | null {
+	let highest: number | null = null;
+	for (const character of Array.from(entry.expression)) {
+		const level = wkLevelByCharacter.get(character);
+		if (level !== undefined && (highest === null || level > highest)) highest = level;
+	}
+	return highest;
+}
+
+export function vocabularyListForLevel(level: JLPTLevel): VocabularyListItem[] {
+	return vocabularyForLevel(level)
+		.map((entry) => ({ ...entry, wkLevel: vocabularyWkLevel(entry) }))
+		.sort(byWkLevel);
 }
 
 export function kanjiPageCharacters(): string[] {

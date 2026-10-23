@@ -19,7 +19,7 @@
 </header>
 
 <section class="content" aria-label="Kanji list">
-	<p class="note">Kanji with a link have a detail page. {kanjiWithPages} of {data.kanji.length} are listed with meanings.</p>
+	<p class="note">Kanji with a link have a detail page. {kanjiWithPages} of {data.kanji.length} are listed with meanings. Ordered by WaniKani level.</p>
 	<div class="table-scroll">
 		<table>
 			<thead>
