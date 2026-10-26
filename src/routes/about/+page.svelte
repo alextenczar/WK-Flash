@@ -43,7 +43,7 @@
 			</li>
 			<li>
 				<h3>Review sorting</h3>
-				<p>Order new reviews by SRS stage, WaniKani level, or item type; keep WaniKani's default order or shuffle randomly. You can also prioritize items from your current level.</p>
+				<p>Order new reviews by SRS stage, WaniKani level, or review type (radicals, kanji, vocabulary), in ascending or descending order. An optional secondary sort breaks ties. You can also keep WaniKani's default order, shuffle randomly, or prioritize items from your current level.</p>
 			</li>
 			<li>
 				<h3>SRS feedback and review planning</h3>

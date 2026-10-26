@@ -89,8 +89,8 @@
 					<span class="gradient-text">in half.</span>
 				</h1>
 				<p class="lede">
-					WK Flash is built for speed: meaning and reading on one card, keyboard-first grading, and
-					analytics that show JLPT coverage, your weakest items, and when you’ll level up.
+					WK Flash is built for speed. You get meaning and reading on one card, keyboard-first grading, and
+					analytics that show your JLPT coverage, your weakest items, and when you’ll level up.
 				</p>
 				<div class="cta-row">
 					<a class="button primary" href="/settings">Connect WaniKani</a>

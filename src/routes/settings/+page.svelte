@@ -14,18 +14,36 @@
 		prioritizeCurrentLevel,
 		interweaveLocalN1Reviews,
 		reviewSort,
-		reviewSortOptions,
+		sortDirectionLabel,
+		sortFieldOptions,
 		showMnemonics,
 		showPartsOfSpeech,
 		showSrsChanges,
 		showTimeEstimate,
 		showUndoButton,
-		type ReviewSortOrder
+		type PrimarySortChoice,
+		type SortDirection,
+		type SortField
 	} from '$lib/review-preferences';
 	import { clearReviewSession } from '$lib/review-session';
 	import { reviewAudioSettings } from '$lib/review-audio';
 	import { theme, type ThemeMode } from '$lib/theme';
 	import { clearCachedReviewQueue, getUser, WaniKaniError } from '$lib/wanikani/api';
+
+	const primaryField = $derived<SortField | null>(
+		typeof $reviewSort.primary === 'string' ? null : $reviewSort.primary.field
+	);
+	const primaryChoice = $derived<PrimarySortChoice>(
+		typeof $reviewSort.primary === 'string' ? $reviewSort.primary : $reviewSort.primary.field
+	);
+	const primaryDirection = $derived<SortDirection>(
+		typeof $reviewSort.primary === 'string' ? 'ascending' : $reviewSort.primary.direction
+	);
+	const secondaryField = $derived<SortField | null>($reviewSort.secondary?.field ?? null);
+	const secondaryDirection = $derived<SortDirection>($reviewSort.secondary?.direction ?? 'ascending');
+	/** "Then by" only applies when there is a field to sort by first. */
+	const secondaryEnabled = $derived(primaryField !== null);
+	const secondaryOptions = $derived(sortFieldOptions.filter((option) => option.value !== primaryField));
 
 	let input = $state($apiKey);
 	let checking = $state(false);
@@ -165,14 +183,66 @@
 
 	<section class="preferences" aria-labelledby="review-sort-heading">
 		<h2 id="review-sort-heading">Review order</h2>
-		<label class="review-sort-setting" for="review-sort">
-			<span>Sort due reviews</span>
-			<select id="review-sort" value={$reviewSort} onchange={(event) => reviewSort.set(event.currentTarget.value as ReviewSortOrder)}>
-				{#each reviewSortOptions as option (option.value)}
-					<option value={option.value}>{option.label}</option>
-				{/each}
-			</select>
-		</label>
+		<div class="sort-rules">
+			<div class="sort-rule">
+				<span class="sort-rule-label" id="primary-sort-label">Primary sort</span>
+				<div class="sort-rule-controls">
+					<select
+						aria-labelledby="primary-sort-label"
+						value={primaryChoice}
+						onchange={(event) => reviewSort.setPrimary(event.currentTarget.value as PrimarySortChoice)}
+					>
+						<option value="default">Default (WaniKani order)</option>
+						{#each sortFieldOptions as option (option.value)}
+							<option value={option.value}>{option.label}</option>
+						{/each}
+						<option value="random">Random</option>
+					</select>
+					<select
+						class="sort-direction"
+						aria-label="Primary sort direction"
+						value={primaryDirection}
+						disabled={primaryField === null}
+						onchange={(event) => reviewSort.setPrimaryDirection(event.currentTarget.value as SortDirection)}
+					>
+						<option value="ascending">{sortDirectionLabel(primaryField, 'ascending')}</option>
+						<option value="descending">{sortDirectionLabel(primaryField, 'descending')}</option>
+					</select>
+				</div>
+			</div>
+			<div class="sort-rule">
+				<span class="sort-rule-label" id="secondary-sort-label">Secondary sort</span>
+				<div class="sort-rule-controls">
+					<select
+						aria-labelledby="secondary-sort-label"
+						value={secondaryField ?? 'none'}
+						disabled={!secondaryEnabled}
+						onchange={(event) => {
+							const value = event.currentTarget.value;
+							reviewSort.setSecondaryField(value === 'none' ? null : (value as SortField));
+						}}
+					>
+						<option value="none">None</option>
+						{#each secondaryOptions as option (option.value)}
+							<option value={option.value}>{option.label}</option>
+						{/each}
+					</select>
+					<select
+						class="sort-direction"
+						aria-label="Secondary sort direction"
+						value={secondaryDirection}
+						disabled={!secondaryEnabled || secondaryField === null}
+						onchange={(event) => reviewSort.setSecondaryDirection(event.currentTarget.value as SortDirection)}
+					>
+						<option value="ascending">{sortDirectionLabel(secondaryField, 'ascending')}</option>
+						<option value="descending">{sortDirectionLabel(secondaryField, 'descending')}</option>
+					</select>
+				</div>
+			</div>
+		</div>
+		{#if !secondaryEnabled}
+			<p class="muted sort-hint">A secondary sort is available when the primary sort is SRS stage, WaniKani level, or review type.</p>
+		{/if}
 		<label class="toggle">
 			<input
 				type="checkbox"
@@ -192,7 +262,7 @@
 		<p class="muted">
 			Local JLPT cards are stored and scheduled only on this device. They are never submitted to WaniKani.
 		</p>
-		<p class="muted">Current-level items come first; the selected sort applies within each group. New queues and newly due items use these settings; saved sessions keep their current order.</p>
+		<p class="muted">When prioritization is on, current-level items appear first, and the sort applies within each group. The secondary sort orders cards that tie on the primary sort. Changes apply to new queues and newly due items; saved sessions keep their current order.</p>
 	</section>
 
 	<section class="preferences">
@@ -420,23 +490,56 @@
 		accent-color: var(--accent);
 	}
 
-	.review-sort-setting {
+	.sort-rules {
 		display: flex;
 		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.sort-rule {
+		display: grid;
+		grid-template-columns: 7.5rem minmax(0, 1fr);
+		align-items: center;
+		gap: 0.5rem 0.75rem;
+	}
+
+	.sort-rule-label {
+		font-weight: 600;
+	}
+
+	.sort-rule-controls {
+		display: flex;
+		flex-wrap: wrap;
 		gap: 0.5rem;
 	}
 
-	.review-sort-setting + .toggle {
-		margin-top: 1rem;
-	}
-
-	.review-sort-setting select {
+	.sort-rule-controls select {
+		flex: 1 1 10rem;
+		min-width: 0;
 		padding: 0.6rem 0.8rem;
 		border: 1px solid var(--border);
 		border-radius: 6px;
 		background: var(--surface);
 		color: var(--text);
 		font: inherit;
+	}
+
+	.sort-rule-controls select.sort-direction {
+		flex: 0 1 11rem;
+	}
+
+	.sort-rule-controls select:disabled {
+		opacity: 0.5;
+	}
+
+	.sort-hint {
+		margin: 0.5rem 0 0;
+		font-size: 0.875rem;
+	}
+
+	.sort-rules + .toggle,
+	.sort-hint + .toggle {
+		margin-top: 1rem;
 	}
 
 	.volume-setting {

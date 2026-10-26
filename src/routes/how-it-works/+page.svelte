@@ -30,7 +30,7 @@
 			title: 'Build your queue',
 			summary: 'The home page shows what is due now, what is coming next, and how far you are through your level.',
 			points: [
-				'Sort by SRS stage, WaniKani level, subject type, or randomly.',
+				'Sort by SRS stage, WaniKani level, or review type, in ascending or descending order, with an optional secondary sort for ties.',
 				'Prioritize your current level to see it first.',
 				'Lessons start here, and starting one moves it into your reviews.'
 			],
