@@ -355,6 +355,32 @@
 		{#if hasSavedReview}
 			<a href="/review"><button class="primary">Continue Review</button></a>
 		{/if}
+		<div class="dashboard-skeleton" aria-hidden="true">
+			<div class="skeleton skeleton-title"></div>
+			<div class="skeleton skeleton-line"></div>
+			<section class="level-kanji">
+				<div class="level-kanji-heading">
+					<div class="skeleton skeleton-heading"></div>
+					<div class="skeleton skeleton-small"></div>
+				</div>
+				<div class="radical-grid">
+					{#each Array(12) as _}
+						<span class="skeleton skeleton-tile"></span>
+					{/each}
+				</div>
+			</section>
+			<section class="level-kanji">
+				<div class="level-kanji-heading">
+					<div class="skeleton skeleton-heading"></div>
+					<div class="skeleton skeleton-small"></div>
+				</div>
+				<div class="kanji-grid">
+					{#each Array(16) as _}
+						<span class="skeleton skeleton-tile"></span>
+					{/each}
+				</div>
+			</section>
+		</div>
 	{:else if error}
 		<p class="error">{error}</p>
 		<p>
@@ -995,6 +1021,60 @@
 
 	.stage-track span.filled {
 		background: var(--accent);
+	}
+
+	.dashboard-skeleton {
+		margin-top: 1rem;
+	}
+
+	.skeleton {
+		display: block;
+		background: linear-gradient(90deg, var(--surface-alt) 25%, var(--border) 50%, var(--surface-alt) 75%);
+		background-size: 200% 100%;
+		border-radius: 6px;
+		animation: skeleton-shimmer 1.4s ease-in-out infinite;
+	}
+
+	.skeleton-title {
+		width: min(16rem, 70%);
+		height: 2rem;
+	}
+
+	.skeleton-line {
+		width: min(26rem, 90%);
+		height: 1rem;
+		margin-top: 0.75rem;
+	}
+
+	.skeleton-heading {
+		width: 9rem;
+		height: 1.1rem;
+	}
+
+	.skeleton-small {
+		width: 5rem;
+		height: 0.9rem;
+	}
+
+	.skeleton-tile {
+		width: 2.75rem;
+		aspect-ratio: 1;
+		justify-self: start;
+	}
+
+	@keyframes skeleton-shimmer {
+		from {
+			background-position: 200% 0;
+		}
+		to {
+			background-position: -200% 0;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.skeleton {
+			animation: none;
+		}
 	}
 
 	.error {
