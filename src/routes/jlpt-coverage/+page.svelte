@@ -1,5 +1,8 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import Seo from '$lib/components/Seo.svelte';
+	import { apiKey } from '$lib/storage';
+	import { getUser } from '$lib/wanikani/api';
 	import jlptKanji from '$lib/data/jlpt-kanji.json';
 	import wkLevels from '$lib/data/wk-levels.json';
 
@@ -50,6 +53,20 @@
 	function formatPercentage(value: number): string {
 		return `${value.toFixed(2)}%`;
 	}
+
+	// Only signed-in users have a WaniKani level to highlight.
+	let userLevel = $state<number | null>(null);
+
+	onMount(() => {
+		if (!$apiKey) return;
+		getUser($apiKey)
+			.then((user) => {
+				userLevel = user.level;
+			})
+			.catch(() => {
+				// The table still works without the highlight.
+			});
+	});
 </script>
 
 <Seo title="JLPT Coverage · WK Flash" description="See how JLPT kanji are distributed across WaniKani levels." />
@@ -80,8 +97,11 @@
 			</thead>
 			<tbody>
 				{#each rows as row (row.level)}
-					<tr>
-						<th scope="row">{row.level}</th>
+					<tr class:current-level={row.level === userLevel}>
+						<th scope="row">
+							{row.level}
+							{#if row.level === userLevel}<span class="your-level">Your level</span>{/if}
+						</th>
 						{#each jlptLevels as level}
 							<td aria-label={`Level ${row.level}, ${level}: ${formatPercentage(row.percentages[level])}`}>
 								{formatPercentage(row.percentages[level])}
@@ -124,6 +144,9 @@
 	thead th:first-child, tbody th { text-align: left; }
 	th small { display: block; margin-top: .1rem; color: var(--muted); font-size: .7rem; font-weight: 400; }
 	tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
+	tbody tr.current-level th, tbody tr.current-level td { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+	tbody tr.current-level th { box-shadow: inset 3px 0 0 var(--accent); }
+	.your-level { margin-left: .4rem; color: var(--accent); font-size: .7rem; font-weight: 600; }
 	.missing-kanji { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
 	.missing-kanji h2 { margin: 0; font-size: 1.1rem; }
 	.missing-kanji section { margin-top: 1.25rem; }
