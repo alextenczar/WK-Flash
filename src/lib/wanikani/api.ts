@@ -1,5 +1,6 @@
 import { browser } from '$app/environment';
 import type { ReviewCard, WKAssignment, WKLevelProgression, WKReviewStatistic, WKSubject, WKUser } from './types';
+import { calculateDailyReviewActivity, type DailyReviewActivity } from './daily-review-activity';
 import { primaryMeaning, subjectImageUrl } from './matching';
 import {
 	WEAKEST_PERCENTAGE_LESS_THAN,
@@ -45,6 +46,7 @@ export interface CachedReviewQueue {
 	nextReviewBatch?: NextReviewBatch | null;
 	upcomingReviewBatches?: NextReviewBatch[];
 	weakestItems?: WeakestItem[] | null;
+	dailyReviewActivity?: DailyReviewActivity | null;
 	user: WKUser;
 }
 
@@ -208,7 +210,11 @@ export async function getCachedReviewQueue(): Promise<CachedReviewQueue | null> 
 					))) ||
 			(snapshot.weakestItems !== undefined &&
 				snapshot.weakestItems !== null &&
-				!isCachedWeakestItems(snapshot.weakestItems))
+				!isCachedWeakestItems(snapshot.weakestItems)) ||
+			(snapshot.dailyReviewActivity !== undefined &&
+				snapshot.dailyReviewActivity !== null &&
+				(!Number.isInteger(snapshot.dailyReviewActivity.count) ||
+					snapshot.dailyReviewActivity.count < 0))
 		) {
 			return null;
 		}
@@ -253,18 +259,23 @@ async function cacheReviewQueue(
 	reviewCount: number,
 	nextReviewBatch?: NextReviewBatch | null,
 	weakestItems?: WeakestItem[] | null,
-	upcomingReviewBatches?: NextReviewBatch[]
+	upcomingReviewBatches?: NextReviewBatch[],
+	dailyReviewActivity?: DailyReviewActivity | null
 ): Promise<void> {
 	const cache = await openSubjectCache();
 	if (!cache) return;
 	try {
 		const previous = nextReviewBatch === undefined ||
 			weakestItems === undefined ||
-			upcomingReviewBatches === undefined
+			upcomingReviewBatches === undefined ||
+			dailyReviewActivity === undefined
 			? await getCachedReviewQueue()
 			: null;
 		const cachedNextReviewBatch = nextReviewBatch === undefined ? previous?.nextReviewBatch : nextReviewBatch;
 		const cachedWeakestItems = weakestItems === undefined ? previous?.weakestItems : weakestItems;
+		const cachedDailyReviewActivity = dailyReviewActivity === undefined
+			? previous?.dailyReviewActivity
+			: dailyReviewActivity;
 		const cachedUpcomingReviewBatches = upcomingReviewBatches === undefined
 			? previous?.upcomingReviewBatches
 			: upcomingReviewBatches;
@@ -277,6 +288,7 @@ async function cacheReviewQueue(
 				user,
 				...(cachedNextReviewBatch !== undefined ? { nextReviewBatch: cachedNextReviewBatch } : {}),
 				...(cachedWeakestItems !== undefined ? { weakestItems: cachedWeakestItems } : {}),
+				...(cachedDailyReviewActivity !== undefined ? { dailyReviewActivity: cachedDailyReviewActivity } : {}),
 				...(cachedUpcomingReviewBatches !== undefined
 					? { upcomingReviewBatches: cachedUpcomingReviewBatches }
 					: {})
@@ -764,6 +776,7 @@ export async function getReviewOverview(apiToken: string): Promise<{
 	nextReviewBatch: NextReviewBatch | null | undefined;
 	upcomingReviewBatches: NextReviewBatch[] | undefined;
 	weakestItems: WeakestItem[] | null;
+	dailyReviewActivity: DailyReviewActivity | null;
 	currentLevelKanji: {
 		id: number;
 		character: string;
@@ -774,9 +787,10 @@ export async function getReviewOverview(apiToken: string): Promise<{
 	}[] | null;
 	currentLevelRadicals: LevelRadical[] | null;
 }> {
-	const [reviewData, weakestItems] = await Promise.all([
+	const [reviewData, weakestItems, dailyReviewActivity] = await Promise.all([
 		getAccessibleReviewData(apiToken),
-		getWeakestItems(apiToken)
+		getWeakestItems(apiToken),
+		getTodayReviewActivity(apiToken)
 	]);
 	const { user, assignments, reviewCount, upcoming: upcomingReviewBatches, subjectById, maxAccessibleLevel } = reviewData;
 	let currentLevelKanji: {
@@ -823,7 +837,8 @@ export async function getReviewOverview(apiToken: string): Promise<{
 		reviewCount,
 		nextReviewBatch,
 		weakestItems,
-		cachedUpcomingReviewBatches
+		cachedUpcomingReviewBatches,
+		dailyReviewActivity
 	);
 	return {
 		user,
@@ -832,6 +847,7 @@ export async function getReviewOverview(apiToken: string): Promise<{
 		nextReviewBatch,
 		upcomingReviewBatches: cachedUpcomingReviewBatches,
 		weakestItems,
+		dailyReviewActivity,
 		currentLevelKanji,
 		currentLevelRadicals
 	};
@@ -857,6 +873,22 @@ export async function getWeakestItems(
 			maxAccessibleLevel
 		);
 		return weakestItemsFromStatistics(statistics, subjects);
+	} catch {
+		return null;
+	}
+}
+
+/** Counts today’s completed reviews using the same review-history fallback as Analytics. */
+export async function getTodayReviewActivity(apiToken: string): Promise<DailyReviewActivity | null> {
+	const updatedAfter = new Date();
+	updatedAfter.setHours(0, 0, 0, 0);
+	const filter = encodeURIComponent(updatedAfter.toISOString());
+	try {
+		const [assignments, reviewStatistics] = await Promise.all([
+			wkFetchAllPages<WKAssignment>(`/assignments?updated_after=${filter}`, apiToken).catch(() => []),
+			wkFetchAllPages<WKReviewStatistic>(`/review_statistics?updated_after=${filter}`, apiToken).catch(() => null)
+		]);
+		return calculateDailyReviewActivity(assignments, reviewStatistics);
 	} catch {
 		return null;
 	}

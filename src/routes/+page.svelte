@@ -20,6 +20,7 @@
 	import type { WKSubject } from '$lib/wanikani/types';
 	import { primaryMeaning, subjectImageUrl, subjectRouteId } from '$lib/wanikani/matching';
 	import type { WeakestItem } from '$lib/wanikani/weakest-items';
+	import type { DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 
 	const REVIEW_COUNT_KEY = 'wk-flash:last-due-count';
 	const hour = new Date().getHours();
@@ -28,6 +29,7 @@
 	let user = $state<WKUser | null>(null);
 	let reviewCount = $state<number | null>(null);
 	let weakestItems = $state<WeakestItem[] | null>(null);
+	let dailyReviewActivity = $state<DailyReviewActivity | null>(null);
 	let weakestExpanded = $state(false);
 	let nextReviewBatch = $state<NextReviewBatch | null | undefined>(undefined);
 	let upcomingReviewBatches = $state<NextReviewBatch[] | undefined>(undefined);
@@ -71,7 +73,8 @@
 		serverReviewCount?: number,
 		upcomingBatch?: NextReviewBatch | null,
 		nextDayBatches?: NextReviewBatch[],
-		cachedWeakestItems?: WeakestItem[] | null
+		cachedWeakestItems?: WeakestItem[] | null,
+		cachedDailyReviewActivity?: DailyReviewActivity | null
 	) {
 		const pendingAssignmentIds = new Set($pendingReviews.map((review) => review.assignmentId));
 		const availableCards = cards.filter((card) => !pendingAssignmentIds.has(card.assignmentId));
@@ -79,6 +82,7 @@
 		nextReviewBatch = upcomingBatch;
 		upcomingReviewBatches = nextDayBatches;
 		if (cachedWeakestItems !== undefined) weakestItems = cachedWeakestItems;
+		dailyReviewActivity = cachedDailyReviewActivity ?? null;
 		reviewCount = navigator.onLine && serverReviewCount !== undefined
 			? serverReviewCount
 			: availableCards.length;
@@ -110,7 +114,8 @@
 					cachedQueue.reviewCount,
 					cachedQueue.nextReviewBatch,
 					cachedQueue.upcomingReviewBatches,
-					cachedQueue.weakestItems
+					cachedQueue.weakestItems,
+					cachedQueue.dailyReviewActivity
 				);
 				return;
 			}
@@ -124,7 +129,8 @@
 				overview.reviewCount,
 				overview.nextReviewBatch,
 				overview.upcomingReviewBatches,
-				overview.weakestItems
+				overview.weakestItems,
+				overview.dailyReviewActivity
 			);
 		} catch (e) {
 			if (cachedQueue) {
@@ -134,7 +140,8 @@
 					cachedQueue.reviewCount,
 					cachedQueue.nextReviewBatch,
 					cachedQueue.upcomingReviewBatches,
-					cachedQueue.weakestItems
+					cachedQueue.weakestItems,
+					cachedQueue.dailyReviewActivity
 				);
 				error = !navigator.onLine
 					? hasSavedReview
@@ -182,6 +189,7 @@
 			nextReviewBatch = cachedQueue?.nextReviewBatch;
 			upcomingReviewBatches = cachedQueue?.upcomingReviewBatches;
 			weakestItems = cachedQueue?.weakestItems ?? null;
+			dailyReviewActivity = cachedQueue?.dailyReviewActivity ?? null;
 			const pendingAssignmentIds = new Set($pendingReviews.map((review) => review.assignmentId));
 			const availableCards = cachedQueue?.cards.filter(
 				(card) => !pendingAssignmentIds.has(card.assignmentId)
@@ -401,6 +409,11 @@
 		<h1>{greeting}, {user?.username}!</h1>
 		<p>
 			You have <strong>{reviewCount}</strong> review{reviewCount === 1 ? '' : 's'} due.
+			{#if dailyReviewActivity}
+				<span class="daily-review-activity">
+					<strong>{dailyReviewActivity.count}</strong> completed today.
+				</span>
+			{/if}
 			{#if nextReviewBatch !== undefined}
 				<span class="next-review-batch">
 					{#if nextReviewBatch}
@@ -612,6 +625,11 @@
 	/* The app.html script sets data-signed-in before first paint, so signed-in users never see the landing page. */
 	:global(html[data-signed-in]) .guest-only {
 		display: none;
+	}
+
+	.daily-review-activity {
+		margin-left: 0.35rem;
+		color: var(--muted);
 	}
 
 	.next-review-batch {
