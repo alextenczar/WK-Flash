@@ -72,7 +72,6 @@
 				<a href="/lessons">Lessons</a>
 				<a href="/analytics">Analytics</a>
 				<a href="/settings">Settings</a>
-				<a href="/about">About</a>
 			{:else}
 				<a href="/how-it-works">How it works</a>
 				<a href="/about">About</a>
