@@ -212,33 +212,34 @@
 	}
 
 	.site-footer {
-		margin-top: 3rem;
-		padding: 2rem 0 3rem;
+		margin-top: 2rem;
+		padding: 1rem 0 1.25rem;
 		border-top: 1px solid var(--border);
 	}
 
 	.footer-links {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(10rem, 14rem));
+		grid-template-columns: repeat(auto-fit, minmax(8rem, 11rem));
 		justify-content: start;
 		align-items: start;
-		gap: 2rem 3rem;
+		gap: 1rem 2rem;
 	}
 
 	.footer-links h2 {
-		margin: 0 0 0.5rem;
+		margin: 0 0 0.3rem;
 		color: var(--muted);
-		font-size: 0.85rem;
+		font-size: 0.7rem;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
 	}
 
 	.footer-links ul {
 		display: grid;
-		gap: 0.35rem;
+		gap: 0.15rem;
 		margin: 0;
 		padding: 0;
 		list-style: none;
+		font-size: 0.8rem;
 	}
 
 	.footer-links a {
@@ -253,10 +254,10 @@
 	}
 
 	.disclaimer {
-		margin: 2rem 0 0;
+		margin: 1rem 0 0;
 		color: var(--muted);
-		font-size: 0.85rem;
-		line-height: 1.6;
+		font-size: 0.7rem;
+		line-height: 1.4;
 	}
 
 	.brand-mark {
