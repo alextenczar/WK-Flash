@@ -309,34 +309,75 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	}
 }
 
-	async function addNewDueReviews() {
-		if (wrapUp || phase !== 'question') return;
+	/**
+	 * Compares a resumed queue with a fresh WaniKani review list, the one a new session would start
+	 * from. Saved cards that are no longer due (for example, answered on another device) are removed,
+	 * and newly due cards are added. Skipped offline or when WaniKani can't be reached, so the saved
+	 * queue is kept as it was.
+	 */
+	async function reconcileResumedQueue() {
+		if (wrapUp || phase !== 'question' || !navigator.onLine) return;
+		let dueCards: ReviewCard[];
 		try {
-			const availableCards = await getAvailableReviewQueue();
-			if (wrapUp || phase !== 'question') return;
-			const newCards = availableCards.filter(
-				(card) => !isLocalReviewCard(card) && !knownAssignmentIds.has(card.assignmentId)
-			);
-			if (newCards.length === 0) return;
+			dueCards = withoutQueuedSubmissions(await buildReviewQueue($apiKey));
+		} catch {
+			return;
+		}
+		if (wrapUp || phase !== 'question') return;
 
-			queue = appendToQueue(
-				queue,
+		const dueIds = new Set(dueCards.map((card) => card.assignmentId));
+		const staleIds = new Set(
+			queue
+				.filter((card) => !isLocalReviewCard(card) && !dueIds.has(card.assignmentId))
+				.map((card) => card.assignmentId)
+		);
+		const newCards = dueCards.filter(
+			(card) => !isLocalReviewCard(card) && !knownAssignmentIds.has(card.assignmentId)
+		);
+		if (staleIds.size === 0 && newCards.length === 0) return;
+
+		let remaining = queue.filter((card) => isLocalReviewCard(card) || !staleIds.has(card.assignmentId));
+		if (newCards.length > 0) {
+			remaining = appendToQueue(
+				remaining,
 				sortReviewCards(newCards, $reviewSort, $prioritizeCurrentLevel),
 				$prioritizeCurrentLevel
 			);
-			const nextKnownIds = new Set(knownAssignmentIds);
-			const nextPendingIds = new Set(pendingIds);
-			for (const card of newCards) {
-				nextKnownIds.add(card.assignmentId);
-				nextPendingIds.add(card.assignmentId);
-			}
-			knownAssignmentIds = nextKnownIds;
-			pendingIds = nextPendingIds;
-			totalUnique += newCards.length;
-			saveCurrentSession();
-		} catch {
-			// Keep the saved queue usable if the due-review refresh is offline.
 		}
+
+		if (remaining[0] !== queue[0]) {
+			// The card on screen was removed, so the next one starts unflipped.
+			flipped = false;
+			resetMoreInfo();
+			questionStartedAt = performance.now();
+		}
+		// An undo snapshot still holds the removed cards, so undoing would bring them back.
+		if (staleIds.size > 0) undoSnapshot = null;
+
+		const nextKnownIds = new Set(knownAssignmentIds);
+		const nextPendingIds = new Set(pendingIds);
+		for (const id of staleIds) {
+			// Forget removed cards so they are treated as new if they become due again, as in a new session.
+			nextKnownIds.delete(id);
+			if (nextPendingIds.delete(id)) totalUnique -= 1;
+		}
+		for (const card of newCards) {
+			nextKnownIds.add(card.assignmentId);
+			nextPendingIds.add(card.assignmentId);
+		}
+		missedIds = new Set([...missedIds].filter((id) => !staleIds.has(id)));
+		knownAssignmentIds = nextKnownIds;
+		pendingIds = nextPendingIds;
+		totalUnique += newCards.length;
+		queue = remaining;
+
+		if (queue.length === 0) {
+			void commitPendingReview();
+			clearReviewSession();
+			goto('/');
+			return;
+		}
+		saveCurrentSession();
 	}
 
 	async function load() {
@@ -385,7 +426,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				return;
 			}
 			if (restoreReviewSession()) {
-				void addNewDueReviews();
+				void reconcileResumedQueue();
 			} else {
 				load();
 			}
