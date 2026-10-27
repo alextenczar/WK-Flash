@@ -13,6 +13,8 @@
 	let { children } = $props();
 	let isOnline = $state(true);
 	const jlptLevels = ['n5', 'n4', 'n3', 'n2', 'n1'];
+	// The footer is hidden during review and lesson sessions so nothing distracts from the task.
+	const hideFooter = $derived(/^\/(review|lessons\/study)(\/|$)/.test(page.url.pathname));
 
 	onMount(() => {
 		// The pre-paint sign-in flag from app.html only needs to hide the landing page until the app hydrates.
@@ -95,6 +97,7 @@
 	{@render children()}
 </main>
 
+{#if !hideFooter}
 <footer class="site-footer">
 	<div class="container">
 		<nav class="footer-links" aria-label="Footer">
@@ -150,6 +153,7 @@
 		</p>
 	</div>
 </footer>
+{/if}
 
 <style>
 	.connection-status {
