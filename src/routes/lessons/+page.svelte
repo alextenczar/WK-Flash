@@ -146,7 +146,8 @@
 								checked={selectedIds.has(lesson.assignmentId)}
 								aria-hidden="true"
 								tabindex="-1"
-								onclick={(event) => event.preventDefault()}
+								onclick={(event) => event.stopPropagation()}
+								onchange={() => toggleLesson(lesson.assignmentId)}
 							/>
 							<span class="lesson-character" class:small={!lesson.subject.data.characters}>
 								{lesson.subject.data.characters ?? lesson.subject.data.slug}
@@ -235,6 +236,12 @@
 		width: 1.1rem;
 		height: 1.1rem;
 		accent-color: var(--accent);
+	}
+
+	.lesson-checkbox {
+		flex: 0 0 auto;
+		margin: 0;
+		cursor: pointer;
 	}
 
 	.lesson-list {
