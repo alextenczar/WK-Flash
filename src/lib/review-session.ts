@@ -37,6 +37,8 @@ export interface ReviewSessionSnapshot {
 	flipped: boolean;
 	undoSnapshot?: ReviewUndoSnapshot | null;
 	pendingReviewSubmission?: PendingReviewSubmission | null;
+	/** `reviewSortKey` of the settings the queue was ordered with. Missing in sessions saved earlier. */
+	sortKey?: string;
 }
 
 export function readReviewSession(): ReviewSessionSnapshot | null {

@@ -16,6 +16,7 @@
 		showUndoButton,
 		appendToQueue,
 		requeueOffset,
+		reviewSortKey,
 		sortReviewCards
 	} from '$lib/review-preferences';
 	import { playPronunciation, reviewAudioSettings } from '$lib/review-audio';
@@ -73,6 +74,8 @@
 	let detailSubject = $state<WKSubject | null>(null);
 
 	let queue = $state<ReviewCard[]>([]);
+	/** The sort settings the current queue was ordered with. */
+	let queueSortKey: string | null = null;
 	let totalUnique = $state(0);
 	let knownAssignmentIds = new Set<number>();
 	let pendingIds = $state(new Set<number>());
@@ -195,15 +198,33 @@
 			wrapUp,
 			flipped,
 			undoSnapshot,
-			pendingReviewSubmission
+			pendingReviewSubmission,
+			sortKey: queueSortKey ?? undefined
 		});
+	}
+
+	/**
+	 * Puts the cards after the one on screen back in the order the current settings give. Local
+	 * N1 cards are not sorted with WaniKani cards, so they are interleaved again afterwards.
+	 */
+	function resortRemainingCards(cards: ReviewCard[]): ReviewCard[] {
+		const waniKaniCards = cards.filter((card) => !isLocalReviewCard(card));
+		const localCards = cards.filter(isLocalReviewCard);
+		const sorted = sortReviewCards(waniKaniCards, $reviewSort, $prioritizeCurrentLevel);
+		return localCards.length > 0 ? interleaveLocalCards(sorted, localCards) : sorted;
 	}
 
 	function restoreReviewSession(): boolean {
 		const saved = readReviewSession();
 		if (!saved || saved.queue.length === 0) return false;
 
-		queue = saved.queue;
+		const currentSortKey = reviewSortKey($reviewSort, $prioritizeCurrentLevel);
+		// Sessions saved before sort keys existed are treated as current, since their order is unknown.
+		const sortChanged = (saved.sortKey ?? currentSortKey) !== currentSortKey;
+		const [onScreen, ...upNext] = saved.queue;
+		// The card on screen stays put; everything after it takes the newly chosen order.
+		queue = sortChanged && onScreen ? [onScreen, ...resortRemainingCards(upNext)] : saved.queue;
+		queueSortKey = currentSortKey;
 		totalUnique = saved.totalUnique;
 		knownAssignmentIds = new Set(
 			saved.knownAssignmentIds ?? [
@@ -222,7 +243,8 @@
 		wrongAnswerCount = Number.isInteger(saved.wrongAnswerCount) ? Math.max(0, saved.wrongAnswerCount ?? 0) : 0;
 		wrapUp = saved.wrapUp;
 		flipped = false;
-		undoSnapshot = saved.undoSnapshot ?? null;
+		// An undo snapshot holds the old order, so undoing after a re-sort would bring that order back.
+		undoSnapshot = sortChanged ? null : (saved.undoSnapshot ?? null);
 		pendingReviewSubmission = saved.pendingReviewSubmission ?? null;
 		phase = 'question';
 		questionStartedAt = performance.now();
@@ -329,6 +351,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				return;
 			}
 			queue = cards;
+			queueSortKey = reviewSortKey($reviewSort, $prioritizeCurrentLevel);
 			totalUnique = queue.length;
 			knownAssignmentIds = new Set(queue.map((card) => card.assignmentId));
 			pendingIds = new Set(queue.map((c) => c.assignmentId));

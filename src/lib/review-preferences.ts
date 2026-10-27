@@ -233,6 +233,19 @@ export function sortReviewCards(
 	return prioritizeLevel ? prioritizeCurrentLevelOrder(sorted) : sorted;
 }
 
+/**
+ * Identifies the ordering `sortReviewCards` produces for these settings. Saved with a review
+ * session so a resumed session can tell whether the order has to be rebuilt. A `random` or
+ * `default` primary ignores the secondary rule, so changing it does not count as a change.
+ */
+export function reviewSortKey(settings: ReviewSortSettings, prioritizeLevel: boolean): string {
+	const rule = (value: SortRule | null) => (value ? `${value.field}:${value.direction}` : 'none');
+	const primary =
+		typeof settings.primary === 'string' ? settings.primary : rule(settings.primary);
+	const secondary = typeof settings.primary === 'string' ? 'none' : rule(settings.secondary);
+	return `${primary}|${secondary}|${prioritizeLevel ? 'level-first' : 'level-any'}`;
+}
+
 export function isCurrentLevelCard(card: ReviewCard): boolean {
 	return card.currentUserLevel !== undefined && card.subject.data.level === card.currentUserLevel;
 }
