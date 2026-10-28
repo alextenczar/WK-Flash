@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import HowItWorksArt, { type ArtKind } from '$lib/components/HowItWorksArt.svelte';
 	import Seo from '$lib/components/Seo.svelte';
 
@@ -90,6 +91,19 @@
 	let flipped = $state(false);
 	let verdict = $state<'correct' | 'wrong' | null>(null);
 
+	/** Set once the script runs, so steps stay visible if JavaScript never loads. */
+	let ready = $state(false);
+	/** Steps that have scrolled into view at least once. */
+	let seen = $state<boolean[]>(phases.map(() => false));
+	/** The step closest to the middle of the screen. */
+	let activeIndex = $state(0);
+	/** How far the reader has scrolled through the timeline, from 0 to 1. */
+	let progress = $state(0);
+	let timelineEl = $state<HTMLElement | null>(null);
+	let phaseEls: (HTMLElement | undefined)[] = [];
+	let tiltX = $state(0);
+	let tiltY = $state(0);
+
 	const verdictText = $derived(
 		verdict === 'correct'
 			? 'Correct. WaniKani gets one review with no misses for meaning or reading. The card is done.'
@@ -97,6 +111,63 @@
 				? 'Wrong. WaniKani gets one review with a miss for both meaning and reading. The card returns in the final round.'
 				: ''
 	);
+
+	onMount(() => {
+		ready = true;
+		updateProgress();
+
+		const seenObserver = new IntersectionObserver(
+			(entries) => {
+				for (const entry of entries) {
+					if (!entry.isIntersecting) continue;
+					seen[Number((entry.target as HTMLElement).dataset.index)] = true;
+					seenObserver.unobserve(entry.target);
+				}
+			},
+			{ threshold: 0.15 }
+		);
+		// A narrow band across the middle of the screen decides which step is in focus.
+		const focusObserver = new IntersectionObserver(
+			(entries) => {
+				for (const entry of entries) {
+					if (entry.isIntersecting) activeIndex = Number((entry.target as HTMLElement).dataset.index);
+				}
+			},
+			{ rootMargin: '-40% 0px -40% 0px' }
+		);
+
+		for (const el of phaseEls) {
+			if (!el) continue;
+			seenObserver.observe(el);
+			focusObserver.observe(el);
+		}
+
+		return () => {
+			seenObserver.disconnect();
+			focusObserver.disconnect();
+		};
+	});
+
+	function updateProgress() {
+		if (!timelineEl) return;
+		const { top, height } = timelineEl.getBoundingClientRect();
+		const anchor = window.innerHeight * 0.6;
+		progress = Math.min(1, Math.max(0, (anchor - top) / height));
+	}
+
+	function tiltCard(event: PointerEvent) {
+		if (event.pointerType !== 'mouse') return;
+		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+		const x = (event.clientX - rect.left) / rect.width - 0.5;
+		const y = (event.clientY - rect.top) / rect.height - 0.5;
+		tiltY = x * 10;
+		tiltX = -y * 10;
+	}
+
+	function resetTilt() {
+		tiltX = 0;
+		tiltY = 0;
+	}
 
 	function phaseNumber(index: number): string {
 		return String(index + 1).padStart(2, '0');
@@ -116,6 +187,8 @@
 	}
 </script>
 
+<svelte:window onscroll={updateProgress} onresize={updateProgress} />
+
 <Seo
 	title="How WK Flash works · Unofficial WaniKani study app"
 	description="How WK Flash works, step by step: connect your WaniKani token, build your review queue, answer one card for meaning and reading, sync results, and track JLPT progress."
@@ -128,8 +201,8 @@
 			<h1 id="intro-heading">From token to graded review</h1>
 			<p class="lede">Five steps from your WaniKani account to a finished review. Open any step to see more.</p>
 			<ul class="facts" aria-label="Key facts">
-				{#each quickFacts as fact (fact)}
-					<li>{fact}</li>
+				{#each quickFacts as fact, i (fact)}
+					<li style="--i: {i}">{fact}</li>
 				{/each}
 			</ul>
 			<p class="intro-links">
@@ -138,54 +211,63 @@
 			</p>
 		</aside>
 
-		<ol class="timeline">
-			{#each phases as phase, index (phase.title)}
-				<li class="phase">
-					<span class="node" aria-hidden="true">{phaseNumber(index)}</span>
-					<div class="phase-body">
-						<div class="art-frame">
-							<HowItWorksArt kind={phase.art} />
-						</div>
-						<div class="phase-content">
-							<h2>{phase.title}</h2>
-							<p class="summary">{phase.summary}</p>
-							<ul class="points">
-								{#each phase.points as point (point)}
-									<li>
-										<svg class="tick" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-											<path d="M3.5 8.5l3 3 6-6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-										</svg>
-										<span>{point}</span>
-									</li>
-								{/each}
-							</ul>
+		<div class="timeline-wrap" bind:this={timelineEl}>
+			<div class="timeline-progress" aria-hidden="true" style:transform="scaleY({progress})"></div>
+			<ol class="timeline" class:ready>
+				{#each phases as phase, index (phase.title)}
+					<li
+						class="phase"
+						class:seen={seen[index]}
+						class:active={activeIndex === index}
+						data-index={index}
+						bind:this={phaseEls[index]}
+					>
+						<span class="node" aria-hidden="true">{phaseNumber(index)}</span>
+						<div class="phase-body">
+							<div class="art-frame">
+								<HowItWorksArt kind={phase.art} visible={seen[index]} />
+							</div>
+							<div class="phase-content">
+								<h2>{phase.title}</h2>
+								<p class="summary">{phase.summary}</p>
+								<ul class="points">
+									{#each phase.points as point, i (point)}
+										<li style="--i: {i}">
+											<svg class="tick" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+												<path pathLength="1" d="M3.5 8.5l3 3 6-6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+											</svg>
+											<span>{point}</span>
+										</li>
+									{/each}
+								</ul>
 
-							<button
-								type="button"
-								class="toggle"
-								aria-expanded={openPanels[index] ? 'true' : 'false'}
-								aria-controls={`under-the-hood-${index}`}
-								onclick={() => togglePanel(index)}
-							>
-								<span>Under the hood</span>
-								<svg class="chevron" class:open={openPanels[index]} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-									<path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-								</svg>
-							</button>
-							<div id={`under-the-hood-${index}`} class="panel" class:open={openPanels[index]}>
-								<div class="panel-inner">
-									<ul>
-										{#each phase.underTheHood as item (item)}
-											<li>{item}</li>
-										{/each}
-									</ul>
+								<button
+									type="button"
+									class="toggle"
+									aria-expanded={openPanels[index] ? 'true' : 'false'}
+									aria-controls={`under-the-hood-${index}`}
+									onclick={() => togglePanel(index)}
+								>
+									<span>Under the hood</span>
+									<svg class="chevron" class:open={openPanels[index]} viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+										<path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+									</svg>
+								</button>
+								<div id={`under-the-hood-${index}`} class="panel" class:open={openPanels[index]}>
+									<div class="panel-inner">
+										<ul>
+											{#each phase.underTheHood as item, i (item)}
+												<li style="--i: {i}">{item}</li>
+											{/each}
+										</ul>
+									</div>
 								</div>
 							</div>
 						</div>
-					</div>
-				</li>
-			{/each}
-		</ol>
+					</li>
+				{/each}
+			</ol>
+		</div>
 	</div>
 
 	<section class="container try" aria-labelledby="try-heading">
@@ -197,16 +279,24 @@
 
 		<div class="demo">
 			<div class="scene">
-				<div class="card" class:flipped>
-					<div class="face front">
-						<span class="glyph" lang="ja">日</span>
-						{#if !flipped}
-							<button type="button" class="pill primary" onclick={() => (flipped = true)}>Flip to reveal</button>
-						{/if}
-					</div>
-					<div class="face back">
-						<p class="answer">Day, sun, Japan</p>
-						<p class="reading" lang="ja">にち</p>
+				<div
+					class="tilt"
+					role="presentation"
+					style="transform: rotateX({tiltX}deg) rotateY({tiltY}deg)"
+					onpointermove={tiltCard}
+					onpointerleave={resetTilt}
+				>
+					<div class="card" class:flipped>
+						<div class="face front">
+							<span class="glyph" lang="ja">日</span>
+							{#if !flipped}
+								<button type="button" class="pill primary" onclick={() => (flipped = true)}>Flip to reveal</button>
+							{/if}
+						</div>
+						<div class="face back">
+							<p class="answer">Day, sun, Japan</p>
+							<p class="reading" lang="ja">にち</p>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -248,6 +338,27 @@
 		top: 2rem;
 	}
 
+	/* Intro lines fade up once on load. */
+	.intro > * {
+		animation: rise 0.5s ease-out backwards;
+	}
+
+	.intro > :nth-child(2) {
+		animation-delay: 0.05s;
+	}
+
+	.intro > :nth-child(3) {
+		animation-delay: 0.1s;
+	}
+
+	.intro > :nth-child(4) {
+		animation-delay: 0.15s;
+	}
+
+	.intro > :nth-child(5) {
+		animation-delay: 0.2s;
+	}
+
 	.eyebrow {
 		margin: 0 0 0.9rem;
 		color: var(--accent-hover);
@@ -287,6 +398,8 @@
 		border-radius: 999px;
 		color: var(--muted);
 		font-size: 0.9rem;
+		animation: rise 0.4s ease-out backwards;
+		animation-delay: calc(var(--i, 0) * 50ms + 300ms);
 	}
 
 	.intro-links {
@@ -321,6 +434,11 @@
 		border-color: var(--accent-hover);
 	}
 
+	/* Pressing a pill gives a small squash, overriding the hover lift while held. */
+	.pill:active {
+		transform: scale(0.98);
+	}
+
 	.pill.primary {
 		border-color: transparent;
 		background: linear-gradient(120deg, #2563eb, #7c3aed);
@@ -336,6 +454,24 @@
 	}
 
 	/* Timeline */
+	.timeline-wrap {
+		position: relative;
+	}
+
+	/* Fills as the reader scrolls through the steps. Its height is set from scroll position in the script. */
+	.timeline-progress {
+		position: absolute;
+		top: 1.1rem;
+		bottom: 1.1rem;
+		left: 1.1rem;
+		width: 2px;
+		border-radius: 2px;
+		background: linear-gradient(180deg, #2563eb, #7c3aed 60%, #fb7185);
+		transform-origin: top;
+		transform: scaleY(0);
+		pointer-events: none;
+	}
+
 	.timeline {
 		position: relative;
 		margin: 0;
@@ -381,6 +517,12 @@
 		font-size: 0.72rem;
 		font-weight: 800;
 		letter-spacing: 0.04em;
+		transition: box-shadow 0.4s ease;
+	}
+
+	/* The step in focus gets a thin ring around its node. */
+	.phase.active .node {
+		box-shadow: 0 0 0 4px var(--surface), 0 0 0 5px rgb(124 58 237 / 45%);
 	}
 
 	.phase-body {
@@ -388,7 +530,16 @@
 		border: 1px solid var(--border);
 		border-radius: 16px;
 		background: var(--surface);
-		transition: border-color 0.2s ease;
+		transition:
+			border-color 0.2s ease,
+			opacity 0.5s ease-out,
+			transform 0.5s ease-out;
+	}
+
+	/* Steps fade up as they scroll into view. Only applied once JavaScript has run. */
+	.timeline.ready .phase:not(.seen) .phase-body {
+		opacity: 0;
+		transform: translateY(12px);
 	}
 
 	.phase-body:hover {
@@ -439,11 +590,23 @@
 		align-items: start;
 	}
 
+	/* Each tick draws itself in, one after another, when its step appears. */
 	.tick {
 		width: 1.1rem;
 		height: 1.1rem;
 		margin-top: 0.2rem;
 		color: var(--good);
+	}
+
+	.tick path {
+		stroke-dasharray: 1 1;
+		stroke-dashoffset: 0;
+		transition: stroke-dashoffset 0.5s ease;
+		transition-delay: calc(var(--i, 0) * 60ms + 150ms);
+	}
+
+	.timeline.ready .phase:not(.seen) .tick path {
+		stroke-dashoffset: 1;
 	}
 
 	.toggle {
@@ -506,6 +669,12 @@
 		margin-top: 0.4rem;
 	}
 
+	/* Items in an opened panel fade in one after another. */
+	.panel.open li {
+		animation: rise 0.3s ease-out backwards;
+		animation-delay: calc(var(--i, 0) * 40ms + 60ms);
+	}
+
 	/* Demo */
 	.try {
 		padding-top: clamp(2.5rem, 6vw, 4rem);
@@ -539,9 +708,16 @@
 		perspective: 1100px;
 	}
 
+	/* Follows the pointer so the card tilts toward it. */
+	.tilt {
+		width: min(320px, 86vw);
+		transform-style: preserve-3d;
+		transition: transform 0.5s ease-out;
+	}
+
 	.card {
 		position: relative;
-		width: min(320px, 86vw);
+		width: 100%;
 		aspect-ratio: 4 / 3;
 		transform-style: preserve-3d;
 		transition: transform 0.6s cubic-bezier(0.3, 0.7, 0.2, 1);
@@ -595,6 +771,15 @@
 		gap: 0.75rem;
 	}
 
+	/* The two grade buttons fade in together. */
+	.grade .pill {
+		animation: rise 0.35s ease-out backwards;
+	}
+
+	.grade .pill:nth-child(2) {
+		animation-delay: 0.06s;
+	}
+
 	.result {
 		max-width: 36rem;
 		margin: 0;
@@ -605,6 +790,7 @@
 		font-size: 1rem;
 		line-height: 1.6;
 		text-align: center;
+		animation: rise 0.35s ease-out backwards;
 	}
 
 	.footnote {
@@ -620,6 +806,13 @@
 		line-height: 1.6;
 	}
 
+	@keyframes rise {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
+		}
+	}
+
 	@media (max-width: 800px) {
 		.layout {
 			grid-template-columns: 1fr;
@@ -631,12 +824,11 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.panel,
-		.chevron,
-		.card,
-		.pill,
-		.phase-body {
-			transition: none;
+		.how *,
+		.how *::before,
+		.how *::after {
+			animation: none !important;
+			transition: none !important;
 		}
 	}
 </style>

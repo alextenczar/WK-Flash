@@ -6,6 +6,7 @@
 	import { getJLPTProgressData, WaniKaniError } from '$lib/wanikani/api';
 	import { calculateDailyReviewActivity, type DailyReviewActivity } from '$lib/wanikani/daily-review-activity';
 	import { calculateLevelUpForecast } from '$lib/wanikani/level-up-forecast';
+	import { overallAccuracyFromStatistics } from '$lib/wanikani/weakest-items';
 	import type { WKAssignment, WKLevelProgression, WKReviewStatistic, WKSubject } from '$lib/wanikani/types';
 
 	type JLPTLevel = keyof typeof jlptKanji;
@@ -89,6 +90,35 @@
 		const rounded = Math.round(days * 10) / 10;
 		return `${rounded} day${rounded === 1 ? '' : 's'}`;
 	}
+
+	function formatPercent(value: number | null): string {
+		if (value === null) return '—';
+		return `${Math.round(value * 10) / 10}%`;
+	}
+
+	function formatAnswerCount(count: number): string {
+		return new Intl.NumberFormat().format(count);
+	}
+
+	const lifetimeAccuracy = $derived(
+		levelUpData?.reviewStatistics ? overallAccuracyFromStatistics(levelUpData.reviewStatistics) : null
+	);
+
+	const daysOnCurrentLevel = $derived.by(() => {
+		const progress = levelUpData;
+		if (!progress?.levelProgressions) return null;
+		const current = progress.levelProgressions
+			.filter((progression) => progression.data.level === progress.currentLevel && !progression.data.abandoned_at)
+			.sort((left, right) => {
+				const leftTime = Date.parse(left.data.unlocked_at ?? left.data.started_at ?? '') || 0;
+				const rightTime = Date.parse(right.data.unlocked_at ?? right.data.started_at ?? '') || 0;
+				return rightTime - leftTime;
+			})
+			.at(0);
+		const startedAt = Date.parse(current?.data.unlocked_at ?? current?.data.started_at ?? '');
+		if (!Number.isFinite(startedAt)) return null;
+		return Math.max(0, (Date.now() - startedAt) / 86_400_000);
+	});
 
 	const subjectsByCharacter = $derived.by(() => {
 		const subjects = new Map<string, WKSubject>();
@@ -293,6 +323,58 @@
 		</p>
 	{/if}
 	{#if $apiKey}
+		<section class="progress-summary" aria-labelledby="progress-heading">
+			<div class="progress-heading">
+				<h2 id="progress-heading">Your progress</h2>
+				<p class="muted">Current WaniKani level and lifetime review accuracy.</p>
+			</div>
+			<div class="progress-stats">
+				<div class="progress-stat">
+					<span>Current level</span>
+					<strong>
+						{#if loading}
+							<span class="loading-dots" role="status" aria-label="Loading current level"><span></span><span></span><span></span></span>
+						{:else}
+							{levelUpData?.currentLevel ?? '—'}
+						{/if}
+					</strong>
+					<p>
+						{#if loading}
+							Updating from WaniKani
+						{:else if daysOnCurrentLevel === null}
+							Time on this level is unavailable.
+						{:else}
+							{formatDays(daysOnCurrentLevel)} on this level
+						{/if}
+					</p>
+				</div>
+				<div class="progress-stat">
+					<span>Lifetime accuracy</span>
+					<strong>
+						{#if loading}
+							<span class="loading-dots" role="status" aria-label="Loading accuracy"><span></span><span></span><span></span></span>
+						{:else}
+							{formatPercent(lifetimeAccuracy?.percent ?? null)}
+						{/if}
+					</strong>
+					<p>
+						{#if loading}
+							Updating from WaniKani
+						{:else if !lifetimeAccuracy}
+							Accuracy is unavailable.
+						{:else if lifetimeAccuracy.total === 0}
+							No review answers recorded yet.
+						{:else}
+							{formatAnswerCount(lifetimeAccuracy.correct)} of {formatAnswerCount(lifetimeAccuracy.total)} meaning and reading answers
+							{#if lifetimeAccuracy.meaningPercent !== null && lifetimeAccuracy.readingPercent !== null}
+								· Meaning {formatPercent(lifetimeAccuracy.meaningPercent)} · Reading {formatPercent(lifetimeAccuracy.readingPercent)}
+							{/if}
+						{/if}
+					</p>
+				</div>
+			</div>
+			<p class="method-note">WaniKani does not keep a history of accuracy. Each review statistic is a lifetime total, so this is overall accuracy, not a trend. Reconstructing improvement over time would mean downloading the full Reviews collection and aggregating it here.</p>
+		</section>
 		<section class="daily-review-summary" aria-labelledby="daily-review-heading">
 			<div>
 				<h2 id="daily-review-heading">Reviews completed today</h2>
@@ -683,6 +765,49 @@
 		font-weight: 400;
 	}
 
+	.progress-summary {
+		margin: 0;
+		padding: 0.25rem 0 0;
+	}
+
+	.progress-heading h2 {
+		margin: 0;
+		font-size: 1.1rem;
+	}
+
+	.progress-heading p {
+		margin: 0.25rem 0 0;
+	}
+
+	.progress-stats {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 1rem;
+		margin-top: 0.9rem;
+	}
+
+	.progress-stat span {
+		color: var(--muted);
+		font-size: 0.8rem;
+	}
+
+	.progress-stat strong {
+		display: block;
+		margin-top: 0.25rem;
+		font-size: 1.6rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.progress-stat p {
+		margin: 0.35rem 0 0;
+		color: var(--muted);
+		font-size: 0.85rem;
+	}
+
+	.progress-summary .method-note {
+		margin: 0.9rem 0 0;
+	}
+
 	.daily-review-summary {
 		display: flex;
 		align-items: center;
@@ -1034,6 +1159,7 @@
 			grid-template-columns: 1fr;
 		}
 
+		.progress-stats,
 		.level-up-stats {
 			grid-template-columns: 1fr 1fr;
 		}

@@ -560,9 +560,11 @@
 
 	.stack-card {
 		display: grid;
+		grid-template-rows: auto 1fr;
 		gap: 0.35rem;
-		width: 11.5rem;
-		padding: 1rem 1.1rem;
+		width: 9.5rem;
+		aspect-ratio: 18.5 / 22.5;
+		padding: 1rem;
 		border: 1px solid rgb(var(--contrast) / 10%);
 		border-radius: 22px;
 		background: linear-gradient(
@@ -574,18 +576,24 @@
 	}
 
 	.stack-card.radical {
+		--kind: #00aaff;
+		border-color: color-mix(in srgb, var(--kind) 72%, transparent);
 		top: 1.2rem;
 		left: 0;
 		transform: rotate(-14deg);
 	}
 
 	.stack-card.vocab {
+		--kind: #a100f1;
+		border-color: color-mix(in srgb, var(--kind) 72%, transparent);
 		right: 0.4rem;
 		bottom: 1.4rem;
 		transform: rotate(12deg);
 	}
 
 	.stack-card strong {
+		align-self: center;
+		justify-self: center;
 		font-size: 2.6rem;
 		line-height: 1;
 	}
@@ -621,10 +629,11 @@
 	}
 
 	.demo-inner {
+		--kind: #f100a1;
 		position: relative;
 		width: 100%;
 		height: 100%;
-		border: 1px solid rgb(var(--contrast) / 10%);
+		border: 1px solid color-mix(in srgb, var(--kind) 72%, transparent);
 		border-radius: 22px;
 		background: linear-gradient(
 			160deg,

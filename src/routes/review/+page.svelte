@@ -760,6 +760,9 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			class:kanji-card={current.subject.object === 'kanji'}
 			class:vocabulary-card={current.subject.object === 'vocabulary' || current.subject.object === 'kana_vocabulary'}
 		>
+			<p class="subject-type">
+				{isLocalReviewCard(current) ? 'Local JLPT N1 · ' : ''}{current.subject.object.replace('_', ' ')}
+			</p>
 			<div class="characters" class:small={!current.subject.data.characters}>
 				{#if current.subject.data.characters}
 					{current.subject.data.characters}
@@ -773,12 +776,9 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 					{current.subject.data.slug}
 				{/if}
 			</div>
-			<p class="subject-type">
-				{isLocalReviewCard(current) ? 'Local JLPT N1 · ' : ''}{current.subject.object.replace('_', ' ')}
-			</p>
 			<div class="card-actions">
 				{#if !flipped}
-					<button class="primary flip-button" onclick={flip}>
+					<button class="flip-button" onclick={flip}>
 						Flip <span class="shortcut" aria-hidden="true">({$keybindings.flip})</span>
 					</button>
 				{:else}
@@ -1010,28 +1010,33 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		width: 100%;
 		max-width: 600px;
 		margin: 1.5rem auto 0;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 16px;
+		background: linear-gradient(160deg, var(--card-start), var(--card-end));
+		border: 1px solid rgb(var(--contrast) / 10%);
+		border-radius: 22px;
+		box-shadow: 0 24px 50px -24px rgb(0 0 0 / 80%);
 		padding: 2.5rem 2rem;
 		text-align: center;
 	}
 
 	.radical-card {
-		border-color: rgba(0, 170, 255, 0.72);
+		--kind: #00aaff;
+		border-color: color-mix(in srgb, var(--kind) 72%, transparent);
 	}
 
 	.kanji-card {
-		border-color: rgba(241, 0, 161, 0.72);
+		--kind: #f100a1;
+		border-color: color-mix(in srgb, var(--kind) 72%, transparent);
 	}
 
 	.vocabulary-card {
-		border-color: rgba(161, 0, 241, 0.72);
+		--kind: #a100f1;
+		border-color: color-mix(in srgb, var(--kind) 72%, transparent);
 	}
 
 	.characters {
-		font-size: 4rem;
+		font-size: 6rem;
 		line-height: 1.2;
+		text-shadow: 0 0 48px color-mix(in srgb, var(--kind, transparent) 28%, transparent);
 	}
 
 	.characters.small {
@@ -1045,10 +1050,16 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	}
 
 	.subject-type {
-		color: var(--muted);
+		position: absolute;
+		top: 1.1rem;
+		left: 1.25rem;
+		margin: 0;
+		color: var(--kind, var(--muted));
+		font-size: 0.72rem;
 		font-weight: 700;
-		text-transform: capitalize;
-		margin-top: 0.25rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		text-align: left;
 	}
 
 	.radical-card .subject-type,
@@ -1076,46 +1087,22 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		justify-content: center;
 		margin: 1.25rem auto 0;
 		padding: 0.25rem 0;
+		background: transparent;
+	}
+
+	.back .answer-section {
+		padding: 0.85rem 1rem;
+		border: 1px solid var(--border);
+		border-radius: 14px;
 		background: var(--surface);
 	}
 
 	.flip-button {
 		width: min(100%, 420px);
-	}
-
-	.radical-card .flip-button {
-		background: #00aaff;
-		border-color: #00aaff;
-		color: #fff;
-	}
-
-	.kanji-card .flip-button {
-		background: #f100a1;
-		border-color: #f100a1;
-		color: #fff;
-	}
-
-	.vocabulary-card .flip-button {
-		background: #a100f1;
-		border-color: #a100f1;
-		color: #fff;
-	}
-
-	@media (hover: hover) {
-		.radical-card .flip-button:hover:not(:disabled) {
-			background: transparent;
-			color: #00aaff;
-		}
-
-		.kanji-card .flip-button:hover:not(:disabled) {
-			background: transparent;
-			color: #f100a1;
-		}
-
-		.vocabulary-card .flip-button:hover:not(:disabled) {
-			background: transparent;
-			color: #a100f1;
-		}
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--kind) 18%, transparent);
+		border-color: var(--kind);
+		color: color-mix(in srgb, var(--kind) 65%, var(--text));
 	}
 
 	.back {
@@ -1257,25 +1244,31 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	}
 
 	.correct {
-		background: var(--good);
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--good) 18%, transparent);
 		border-color: var(--good);
-		color: #fff;
+		color: var(--good);
 	}
 
 	.wrong {
-		background: var(--bad);
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--bad) 18%, transparent);
 		border-color: var(--bad);
-		color: #fff;
+		color: var(--bad);
 	}
 
 	@media (hover: hover) {
+		.flip-button:hover:not(:disabled) {
+			background: color-mix(in srgb, var(--kind) 30%, transparent);
+		}
+
 		.correct:hover:not(:disabled) {
-			background: transparent;
+			background: color-mix(in srgb, var(--good) 30%, transparent);
 			color: var(--good);
 		}
 
 		.wrong:hover:not(:disabled) {
-			background: transparent;
+			background: color-mix(in srgb, var(--bad) 30%, transparent);
 			color: var(--bad);
 		}
 	}
@@ -1320,8 +1313,13 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			padding: 1rem;
 		}
 
+		.subject-type {
+			top: 0.7rem;
+			left: 0.85rem;
+		}
+
 		.characters {
-			font-size: 3.25rem;
+			font-size: 4.5rem;
 		}
 
 		.card-actions {

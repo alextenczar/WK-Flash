@@ -486,8 +486,6 @@ export async function getJLPTProgressData(
 		Date.now() - matchingCache.assignmentsFetchedAt < JLPT_ASSIGNMENTS_CACHE_TTL;
 	const types = 'radical,kanji,vocabulary,kana_vocabulary';
 	const includeForecastData = options.includeForecastData ?? true;
-	const updatedAfter = new Date();
-	updatedAfter.setHours(0, 0, 0, 0);
 	const [subjects, assignments, reviewStatistics, levelProgressions] = await Promise.all([
 		subjectsAreFresh
 			? Promise.resolve(matchingCache.subjects)
@@ -496,10 +494,7 @@ export async function getJLPTProgressData(
 			? Promise.resolve(matchingCache.assignments)
 			: wkFetchAllPages<WKAssignment>(`/assignments?subject_types=${types}&levels=${assignmentLevels}`, apiToken),
 		includeForecastData
-			? wkFetchAllPages<WKReviewStatistic>(
-				`/review_statistics?updated_after=${encodeURIComponent(updatedAfter.toISOString())}`,
-				apiToken
-			).catch((error: unknown) => {
+			? wkFetchAllPages<WKReviewStatistic>('/review_statistics', apiToken).catch((error: unknown) => {
 				console.warn('Could not load WaniKani review statistics.', error);
 				return null;
 			})

@@ -28,6 +28,47 @@ export function statisticAnswerCounts(statistic: WKReviewStatistic): {
 	};
 }
 
+function finiteCount(value: number | null | undefined): number {
+	return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function percent(correct: number, total: number): number | null {
+	return total > 0 ? (correct / total) * 100 : null;
+}
+
+/** Lifetime meaning and reading accuracy across all review statistics. */
+export function overallAccuracyFromStatistics(statistics: WKReviewStatistic[]): {
+	percent: number | null;
+	correct: number;
+	total: number;
+	meaningPercent: number | null;
+	readingPercent: number | null;
+} {
+	let meaningCorrect = 0;
+	let meaningTotal = 0;
+	let readingCorrect = 0;
+	let readingTotal = 0;
+	for (const statistic of statistics) {
+		if (statistic.data.hidden) continue;
+		const data = statistic.data;
+		const itemMeaningCorrect = finiteCount(data.meaning_correct);
+		const itemReadingCorrect = finiteCount(data.reading_correct);
+		meaningCorrect += itemMeaningCorrect;
+		meaningTotal += itemMeaningCorrect + finiteCount(data.meaning_incorrect);
+		readingCorrect += itemReadingCorrect;
+		readingTotal += itemReadingCorrect + finiteCount(data.reading_incorrect);
+	}
+	const correct = meaningCorrect + readingCorrect;
+	const total = meaningTotal + readingTotal;
+	return {
+		percent: percent(correct, total),
+		correct,
+		total,
+		meaningPercent: percent(meaningCorrect, meaningTotal),
+		readingPercent: percent(readingCorrect, readingTotal)
+	};
+}
+
 export function rankWeakestStatistics(
 	statistics: WKReviewStatistic[],
 	limit = WEAKEST_ITEMS_LIMIT

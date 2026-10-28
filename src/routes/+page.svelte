@@ -55,8 +55,11 @@
 			: []
 	);
 	let requiredGuruKanji = $derived(currentLevelKanji?.length ? Math.ceil(currentLevelKanji.length * 0.9) : 0);
-	let selectedKanjiCharacter = $state<string | null>(null);
-	let selectedKanjiPopupPosition = $state<{ left: number; top: number } | null>(null);
+	type DashboardItemKey = `kanji:${string}` | `radical:${string}`;
+	let selectedItemKey = $state<DashboardItemKey | null>(null);
+	let selectedItemPopupPosition = $state<{ left: number; top: number } | null>(null);
+	/** Last pointer type seen, because click events do not include pointerType. */
+	let lastPointerType = $state<string>('mouse');
 	let now = $state(Date.now());
 	let hasSavedReview = $state(false);
 	let hasCachedReviewQueue = $state(false);
@@ -291,6 +294,19 @@
 		}
 	}
 
+	/** Hours and minutes until a future review, e.g. "in 2 hours" or "in 15 minutes". */
+	function formatUntilDue(dueAt: number): string {
+		const totalMinutes = Math.max(1, Math.ceil((dueAt - now) / 60_000));
+		if (totalMinutes < 60) {
+			return `in ${totalMinutes} minute${totalMinutes === 1 ? '' : 's'}`;
+		}
+		const hours = Math.floor(totalMinutes / 60);
+		const minutes = totalMinutes % 60;
+		const hourPart = `${hours} hour${hours === 1 ? '' : 's'}`;
+		if (minutes === 0) return `in ${hourPart}`;
+		return `in ${hourPart} ${minutes} minute${minutes === 1 ? '' : 's'}`;
+	}
+
 	function kanjiDueLabel(item: { srsStage: number | null; availableAt: string | null }): string {
 		if (item.srsStage === null) return 'Not started';
 		if (item.srsStage >= 9) return 'Burned; no further reviews';
@@ -301,47 +317,66 @@
 		return `Due ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(dueAt)}`;
 	}
 
+	function kanjiUntilLabel(item: { unlocked?: boolean; srsStage: number | null; availableAt: string | null }): string | null {
+		if (item.unlocked === false) return null;
+		if (item.srsStage === null || item.srsStage >= 9 || !item.availableAt) return null;
+		const dueAt = Date.parse(item.availableAt);
+		if (!Number.isFinite(dueAt) || dueAt <= now) return null;
+		return `(${formatUntilDue(dueAt)})`;
+	}
+
 	function kanjiStatusLabel(item: { unlocked: boolean; srsStage: number | null; availableAt: string | null }): string {
 		return item.unlocked ? kanjiDueLabel(item) : 'Locked: not unlocked yet';
 	}
 
-	function dismissKanjiPopup(event: MouseEvent) {
-		if (!(event.target instanceof Element) || !event.target.closest('.kanji-item')) {
-			selectedKanjiCharacter = null;
-			selectedKanjiPopupPosition = null;
+	function rememberPointerType(event: PointerEvent) {
+		lastPointerType = event.pointerType || 'mouse';
+	}
+
+	function usesHoverNavigation(): boolean {
+		if (lastPointerType === 'mouse') return true;
+		if (lastPointerType === 'touch' || lastPointerType === 'pen') return false;
+		return window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+	}
+
+	function dismissItemPopup(event: MouseEvent) {
+		if (!(event.target instanceof Element) || !event.target.closest('.kanji-item, .radical-item')) {
+			selectedItemKey = null;
+			selectedItemPopupPosition = null;
 		}
 	}
 
-	function handleKanjiClick(event: MouseEvent, character: string) {
-		event.preventDefault();
-		void goto(`/kanji/${encodeURIComponent(character)}?from=home`);
-	}
-
-	function toggleKanjiPopup(event: MouseEvent, character: string) {
-		if (selectedKanjiCharacter === character) {
-			selectedKanjiCharacter = null;
-			selectedKanjiPopupPosition = null;
-			return;
-		}
-
-		const target = event.currentTarget as HTMLButtonElement;
+	function showItemPopup(event: MouseEvent, key: DashboardItemKey) {
+		const target = event.currentTarget as HTMLElement;
 		const bounds = target.getBoundingClientRect();
 		const popupWidth = Math.min(192, window.innerWidth * 0.75);
 		const left = Math.max(
 			12,
 			Math.min(bounds.left + bounds.width / 2 - popupWidth / 2, window.innerWidth - popupWidth - 12)
 		);
-		const popupHeight = 48;
+		const popupHeight = 64;
 		const below = bounds.bottom + 8;
 		const top = below + popupHeight <= window.innerHeight - 8
 			? below
 			: Math.max(8, bounds.top - popupHeight - 8);
-		selectedKanjiCharacter = character;
-		selectedKanjiPopupPosition = { left, top };
+		selectedItemKey = key;
+		selectedItemPopupPosition = { left, top };
+	}
+
+	function handleDashboardItemActivate(event: MouseEvent, key: DashboardItemKey, href: string) {
+		if (!usesHoverNavigation() && selectedItemKey !== key) {
+			event.preventDefault();
+			showItemPopup(event, key);
+			return;
+		}
+		selectedItemKey = null;
+		selectedItemPopupPosition = null;
+		event.preventDefault();
+		void goto(href);
 	}
 </script>
 
-<svelte:window onclick={dismissKanjiPopup} />
+<svelte:window onclick={dismissItemPopup} onpointerdown={rememberPointerType} />
 
 <Seo
 	title={$apiKey && clientReady ? 'Home · WK Flash' : defaultTitle}
@@ -455,8 +490,11 @@
 						<a
 							href="/radical/{encodeURIComponent(item.slug)}?from=home"
 							class="radical-item"
-							title="{item.meaning}: {kanjiDueLabel(item)}"
-							aria-label="{item.meaning}: {kanjiDueLabel(item)}"
+							data-tooltip="{item.meaning}: {kanjiDueLabel(item)}"
+							data-until={kanjiUntilLabel(item)}
+							aria-label="{item.meaning}: {kanjiDueLabel(item)}{kanjiUntilLabel(item) ? `, ${kanjiUntilLabel(item)}` : ''}"
+							aria-expanded={selectedItemKey === `radical:${item.slug}`}
+							onclick={(event) => handleDashboardItemActivate(event, `radical:${item.slug}`, `/radical/${encodeURIComponent(item.slug)}?from=home`)}
 						>
 							<span class="radical-glyph" lang="ja">
 								{#if item.character}
@@ -472,6 +510,13 @@
 									<span class:filled={index < (item.passedAt !== null ? 5 : Math.min(item.srsStage ?? 0, 4))}></span>
 								{/each}
 							</span>
+							{#if selectedItemKey === `radical:${item.slug}`}
+								<span
+									class="item-tooltip"
+									role="status"
+									style="left: {selectedItemPopupPosition?.left ?? 8}px; top: {selectedItemPopupPosition?.top ?? 8}px;"
+								>{item.meaning}: {kanjiDueLabel(item)}{#if kanjiUntilLabel(item)}<br />{kanjiUntilLabel(item)}{/if}</span>
+							{/if}
 						</a>
 					{/each}
 				</div>
@@ -490,9 +535,10 @@
 							class="kanji-item"
 							class:kanji-locked={!item.unlocked}
 							data-tooltip={kanjiStatusLabel(item)}
-							aria-label="{item.character}: {kanjiStatusLabel(item)}"
-							aria-expanded={selectedKanjiCharacter === item.character}
-							onclick={(event) => handleKanjiClick(event, item.character)}
+							data-until={kanjiUntilLabel(item)}
+							aria-label="{item.character}: {kanjiStatusLabel(item)}{kanjiUntilLabel(item) ? `, ${kanjiUntilLabel(item)}` : ''}"
+							aria-expanded={selectedItemKey === `kanji:${item.character}`}
+							onclick={(event) => handleDashboardItemActivate(event, `kanji:${item.character}`, `/kanji/${encodeURIComponent(item.character)}?from=home`)}
 						>
 							<span class="kanji-character">{item.character}</span>
 							<span class="stage-track" aria-hidden="true">
@@ -500,12 +546,12 @@
 									<span class:filled={index < (item.passedAt !== null ? 5 : Math.min(item.srsStage ?? 0, 4))}></span>
 								{/each}
 							</span>
-							{#if selectedKanjiCharacter === item.character}
+							{#if selectedItemKey === `kanji:${item.character}`}
 								<span
-									class="kanji-due"
+									class="item-tooltip"
 									role="status"
-									style="left: {selectedKanjiPopupPosition?.left ?? 8}px; top: {selectedKanjiPopupPosition?.top ?? 8}px;"
-								>{kanjiStatusLabel(item)}</span>
+									style="left: {selectedItemPopupPosition?.left ?? 8}px; top: {selectedItemPopupPosition?.top ?? 8}px;"
+								>{kanjiStatusLabel(item)}{#if kanjiUntilLabel(item)}<br />{kanjiUntilLabel(item)}{/if}</span>
 							{/if}
 						</button>
 					{/each}
@@ -895,6 +941,7 @@
 	}
 
 	.radical-item {
+		position: relative;
 		display: grid;
 		justify-items: center;
 		gap: 0.4rem;
@@ -959,15 +1006,15 @@
 		outline-offset: 3px;
 	}
 
-	.kanji-item:not([aria-expanded='true']):focus-visible::after,
-	.kanji-item:not([aria-expanded='true']):hover::after,
-	.kanji-due {
+	:is(.radical-item, .kanji-item):not([aria-expanded='true']):focus-visible::after,
+	:is(.radical-item, .kanji-item):not([aria-expanded='true']):hover::after,
+	.item-tooltip {
 		position: absolute;
 		z-index: 2;
 		left: 50%;
 		bottom: calc(100% + 0.35rem);
 		width: max-content;
-		max-width: min(12rem, 75vw);
+		max-width: min(16rem, 75vw);
 		padding: 0.35rem 0.5rem;
 		border: 1px solid var(--border);
 		border-radius: 4px;
@@ -976,17 +1023,21 @@
 		font-size: 0.8rem;
 		line-height: 1.3;
 		text-align: center;
-		white-space: normal;
+		white-space: pre-line;
 		transform: translateX(-50%);
 		box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
 	}
 
-	.kanji-item:not([aria-expanded='true']):focus-visible::after {
+	:is(.radical-item, .kanji-item):not([aria-expanded='true']):focus-visible::after {
 		content: attr(data-tooltip);
 	}
 
+	:is(.radical-item, .kanji-item):not([aria-expanded='true'])[data-until]:focus-visible::after {
+		content: attr(data-tooltip) '\A' attr(data-until);
+	}
+
 	@media (hover: hover) and (pointer: fine) {
-		.kanji-item:hover {
+		:is(.radical-item, .kanji-item):hover {
 			z-index: 3;
 		}
 
@@ -994,12 +1045,16 @@
 			border-color: var(--accent);
 		}
 
-		.kanji-item:not([aria-expanded='true']):hover::after {
+		:is(.radical-item, .kanji-item):not([aria-expanded='true']):hover::after {
 			content: attr(data-tooltip);
+		}
+
+		:is(.radical-item, .kanji-item):not([aria-expanded='true'])[data-until]:hover::after {
+			content: attr(data-tooltip) '\A' attr(data-until);
 		}
 	}
 
-	.kanji-due {
+	.item-tooltip {
 		position: fixed;
 		z-index: 10;
 		left: auto;
