@@ -274,9 +274,9 @@
 				checked={$confirmLessonSecondPass}
 				onchange={(event) => confirmLessonSecondPass.set(event.currentTarget.checked)}
 			/>
-			Review each lesson again to confirm it before it starts
+			Confirm each lesson again before it starts
 		</label>
-		<p class="muted">When this is off, each item starts as soon as you move past it in the lesson.</p>
+		<p class="muted">When this is off, each item is checked once with Correct or Wrong, and starts once you get it right.</p>
 	</section>
 
 	<section class="preferences">

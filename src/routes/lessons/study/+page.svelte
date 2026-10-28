@@ -175,19 +175,6 @@
 		rememberStateForUndo();
 		resetMoreInfo();
 		submitError = '';
-		const passed = cards[index];
-		if (!$confirmLessonSecondPass) {
-			// Without the confirm pass, an item starts once the learner has moved past it.
-			heldCard = passed;
-			if (index >= cards.length - 1) {
-				commitHeldCard();
-				finishSession();
-				return;
-			}
-			index += 1;
-			revealed = false;
-			return;
-		}
 		if (index >= cards.length - 1) {
 			phase = 'review';
 			reviewQueue = [...cards];
@@ -256,6 +243,11 @@
 					(card) => selected.has(card.assignmentId) && !pendingStarts.has(card.assignmentId)
 				);
 				if (!cards.length) void goto('/lessons');
+				// With the second pass off, the session is a single review: Correct, Wrong, or Undo.
+				else if (!$confirmLessonSecondPass) {
+					phase = 'review';
+					reviewQueue = [...cards];
+				}
 			} catch (e) {
 				error = e instanceof WaniKaniError ? e.message : 'Unable to load lessons.';
 			} finally {
