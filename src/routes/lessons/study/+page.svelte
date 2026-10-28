@@ -314,7 +314,11 @@
 			class:vocabulary-card={current.subject.object === 'vocabulary' || current.subject.object === 'kana_vocabulary'}
 		>
 			<p class="subject-type">{current.subject.object.replace('_', ' ')}</p>
-			<div class="characters">
+			<div
+				class="characters"
+				class:multi={(current.subject.data.characters?.length ?? 0) > 1}
+				class:long={(current.subject.data.characters?.length ?? 0) > 3}
+			>
 				{current.subject.data.characters ?? current.subject.data.slug}
 			</div>
 			<div class="card-actions">
@@ -345,11 +349,18 @@
 					{#if current.subject.data.readings?.length}
 						<section>
 							<h2>Reading</h2>
-							<p class="answer-accent">
-								{#each readingsForDisplay(current.subject) as group, groupIndex}
-									{#if groupIndex > 0} · {/if}{group.readings.map((reading) => reading.reading).join(', ')}
-								{/each}
-							</p>
+							{#each readingsForDisplay(current.subject) as group (group.type)}
+								<p class="reading-group">
+									{#if group.type !== 'Reading'}<span class="reading-type">{group.type}:</span> {/if}
+									{#each group.readings as option, index}
+										{#if option.accepted}
+											<strong class="answer-accent">{option.reading}</strong>
+										{:else}
+											<span>{option.reading}</span>
+										{/if}{index < group.readings.length - 1 ? ', ' : ''}
+									{/each}
+								</p>
+							{/each}
 						</section>
 					{/if}
 					<section>
@@ -510,7 +521,7 @@
 		width: 100%;
 		max-width: 600px;
 		margin: 1.5rem auto 0;
-		padding: 2.5rem 2rem;
+		padding: 3.5rem 2.75rem;
 		border: 1px solid rgb(var(--contrast) / 10%);
 		border-radius: 22px;
 		background: linear-gradient(160deg, var(--card-start), var(--card-end));
@@ -576,6 +587,14 @@
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		color: var(--muted);
+	}
+
+	.characters.multi {
+		font-size: 4rem;
+	}
+
+	.characters.long {
+		font-size: 2.75rem;
 	}
 
 	.characters {
@@ -654,6 +673,10 @@
 	.context-sentence p + p {
 		margin-top: 0.3rem;
 		color: var(--muted);
+	}
+
+	.reading-group {
+		margin: 0;
 	}
 
 	.reading-type {
@@ -776,7 +799,7 @@
 
 		.lesson-card {
 			margin-top: 0.5rem;
-			padding: 1rem;
+			padding: 2rem 1.5rem;
 		}
 
 		.subject-type {
@@ -786,6 +809,14 @@
 
 		.characters {
 			font-size: 4.5rem;
+		}
+
+		.characters.multi {
+			font-size: 3rem;
+		}
+
+		.characters.long {
+			font-size: 2.25rem;
 		}
 
 		.card-actions {

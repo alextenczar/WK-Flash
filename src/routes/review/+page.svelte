@@ -763,7 +763,12 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 			<p class="subject-type">
 				{isLocalReviewCard(current) ? 'Local JLPT N1 · ' : ''}{current.subject.object.replace('_', ' ')}
 			</p>
-			<div class="characters" class:small={!current.subject.data.characters}>
+			<div
+				class="characters"
+				class:small={!current.subject.data.characters}
+				class:multi={(current.subject.data.characters?.length ?? 0) > 1}
+				class:long={(current.subject.data.characters?.length ?? 0) > 3}
+			>
 				{#if current.subject.data.characters}
 					{current.subject.data.characters}
 				{:else if subjectImageUrl(current.subject)}
@@ -813,7 +818,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 										{#if option.accepted}
 											<strong class="answer-accent" title={option.primary ? 'Primary reading' : 'Accepted alternative'}>{option.reading}</strong>
 										{:else}
-											<span title="Alternative reading">{option.reading}</span>
+											<span class="alt-reading" title="Alternative reading">{option.reading}</span>
 										{/if}{index < group.readings.length - 1 ? ', ' : ''}
 									{/each}
 								</p>
@@ -1014,7 +1019,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		border: 1px solid rgb(var(--contrast) / 10%);
 		border-radius: 22px;
 		box-shadow: 0 24px 50px -24px rgb(0 0 0 / 80%);
-		padding: 2.5rem 2rem;
+		padding: 3.5rem 2.75rem;
 		text-align: center;
 	}
 
@@ -1031,6 +1036,14 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	.vocabulary-card {
 		--kind: #a100f1;
 		border-color: color-mix(in srgb, var(--kind) 72%, transparent);
+	}
+
+	.characters.multi {
+		font-size: 4rem;
+	}
+
+	.characters.long {
+		font-size: 2.75rem;
 	}
 
 	.characters {
@@ -1175,6 +1188,10 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		text-transform: capitalize;
 	}
 
+	.alt-reading {
+		color: var(--muted);
+	}
+
 	.answer-accent {
 		color: var(--accent);
 	}
@@ -1310,7 +1327,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 
 		.card {
 			margin-top: 0.5rem;
-			padding: 1rem;
+			padding: 2rem 1.5rem;
 		}
 
 		.subject-type {
@@ -1320,6 +1337,14 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 
 		.characters {
 			font-size: 4.5rem;
+		}
+
+		.characters.multi {
+			font-size: 3rem;
+		}
+
+		.characters.long {
+			font-size: 2.25rem;
 		}
 
 		.card-actions {
