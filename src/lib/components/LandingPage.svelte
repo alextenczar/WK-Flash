@@ -116,11 +116,11 @@
 			<div class="hero-stage" aria-hidden="true">
 				<div class="stack-card radical">
 					<span class="kind">Radical</span>
-					<strong>火</strong>
+					<strong>口</strong>
 				</div>
 				<div class="stack-card vocab">
 					<span class="kind">Vocabulary</span>
-					<strong>火山</strong>
+					<strong>人生</strong>
 				</div>
 				<div class="demo-card">
 					<div class="demo-inner">
@@ -129,7 +129,7 @@
 								<span class="kind kanji">Kanji · Level 12</span>
 								<span class="pips"><i></i><i></i><i></i><i class="off"></i><i class="off"></i></span>
 							</div>
-							<div class="glyph">火</div>
+							<div class="glyph">速</div>
 							<div class="prompt">Meaning + reading</div>
 						</div>
 						<div class="demo-face back">
@@ -140,11 +140,11 @@
 							<div class="answers">
 								<div>
 									<span>Meaning</span>
-									<strong>Fire</strong>
+									<strong>Speed</strong>
 								</div>
 								<div>
 									<span>Reading</span>
-									<strong>ひ · か</strong>
+									<strong class="reading">はや・そく</strong>
 								</div>
 							</div>
 							<div class="chips">
@@ -730,6 +730,15 @@
 
 	.answers strong {
 		font-size: 1.15rem;
+	}
+
+	.answers div {
+		min-width: 0;
+	}
+
+	.answers strong.reading {
+		font-size: 0.9rem;
+		white-space: nowrap;
 	}
 
 	.chip {
