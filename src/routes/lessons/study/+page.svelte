@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
 	import { gamepadBindings, gamepadButtonLabel, keybindings } from '$lib/keybindings';
 	import { gamepadConnected, startGamepadPolling } from '$lib/gamepad';
 	import { playPronunciation, reviewAudioSettings } from '$lib/review-audio';
-	import { showMnemonics, showPartsOfSpeech } from '$lib/review-preferences';
+	import { confirmLessonSecondPass, showMnemonics, showPartsOfSpeech } from '$lib/review-preferences';
 	import { pendingLessonStarts, startQueuedLesson } from '$lib/lesson-outbox';
 	import { getLessonQueue, getSubjectsByIds, WaniKaniError, type LessonCard } from '$lib/wanikani/api';
 	import { allMeanings, primaryMeaning, readingsForDisplay, vocabularyByReading } from '$lib/wanikani/matching';
@@ -26,6 +26,11 @@
 	let moreInfoLoadedFor = $state<number | null>(null);
 	let relatedSubjects = $state<WKSubject[]>([]);
 	let detailSubject = $state<WKSubject | null>(null);
+	/** The state before the last action. Only one step is kept, like the review page. */
+	type UndoSnapshot = { phase: 'learning' | 'review'; index: number; revealed: boolean; reviewQueue: LessonCard[] };
+	let undoSnapshot = $state<UndoSnapshot | null>(null);
+	/** The last correct answer in review. Its start is sent when the next action happens, so Undo can cancel it. */
+	let heldCard = $state<LessonCard | null>(null);
 	const current = $derived(phase === 'learning' ? cards[index] ?? null : reviewQueue[0] ?? null);
 	const similarKanji = $derived(relatedSubjects.filter((subject) => subject.object === 'kanji'));
 	const vocabularyGroups = $derived(vocabularyByReading(relatedSubjects));
@@ -100,6 +105,9 @@
 		} else if (revealed && key === $keybindings.wrong) {
 			event.preventDefault();
 			if (phase === 'review') grade(false);
+		} else if (key === $keybindings.undo && undoSnapshot) {
+			event.preventDefault();
+			undo();
 		}
 	}
 
@@ -113,14 +121,73 @@
 			else grade(true);
 		} else if (revealed && phase === 'review' && button === $gamepadBindings.wrong) {
 			grade(false);
+		} else if (button === $gamepadBindings.undo && undoSnapshot) {
+			undo();
 		}
 	}
 
 	onMount(() => startGamepadPolling(handleGamepadButton));
+	// Sends a held start when the page is left, so it is not lost.
+	onDestroy(commitHeldCard);
+
+	function commitHeldCard() {
+		const card = heldCard;
+		if (!card) return;
+		heldCard = null;
+		// The start is sent now, so the last answer can no longer be undone.
+		undoSnapshot = null;
+		void startQueuedLesson($apiKey, card.assignmentId).catch((e: unknown) => {
+			submitError = e instanceof WaniKaniError
+				? `${e.message} The lesson is saved and will retry when connected.`
+				: 'Could not submit this lesson to WaniKani. It is saved and will retry when connected.';
+		});
+	}
+
+	/** Sends any held start first, since the action about to happen replaces the undo step. */
+	function rememberStateForUndo() {
+		commitHeldCard();
+		undoSnapshot = { phase, index, revealed, reviewQueue: [...reviewQueue] };
+	}
+
+	function undo() {
+		const snapshot = undoSnapshot;
+		if (!snapshot) return;
+		// Undoing a correct answer returns the card to the queue, so its held start is dropped.
+		heldCard = null;
+		undoSnapshot = null;
+		phase = snapshot.phase;
+		index = snapshot.index;
+		revealed = snapshot.revealed;
+		reviewQueue = snapshot.reviewQueue;
+		submitError = '';
+		resetMoreInfo();
+	}
+
+	function onPageHide() {
+		commitHeldCard();
+	}
+
+	function onVisibilityChange() {
+		if (document.visibilityState === 'hidden') commitHeldCard();
+	}
 
 	function next() {
+		rememberStateForUndo();
 		resetMoreInfo();
 		submitError = '';
+		const passed = cards[index];
+		if (!$confirmLessonSecondPass) {
+			// Without the confirm pass, an item starts once the learner has moved past it.
+			heldCard = passed;
+			if (index >= cards.length - 1) {
+				commitHeldCard();
+				finishSession();
+				return;
+			}
+			index += 1;
+			revealed = false;
+			return;
+		}
 		if (index >= cards.length - 1) {
 			phase = 'review';
 			reviewQueue = [...cards];
@@ -144,6 +211,7 @@
 	function grade(wasCorrect: boolean) {
 		const card = reviewQueue[0];
 		if (!card) return;
+		rememberStateForUndo();
 		resetMoreInfo();
 		revealed = false;
 		submitError = '';
@@ -157,12 +225,11 @@
 		}
 
 		reviewQueue = reviewQueue.slice(1);
-		void startQueuedLesson($apiKey, card.assignmentId).catch((e: unknown) => {
-			submitError = e instanceof WaniKaniError
-				? `${e.message} The lesson is saved and will retry when connected.`
-				: 'Could not submit this lesson to WaniKani. It is saved and will retry when connected.';
-		});
-		if (reviewQueue.length === 0) finishSession();
+		heldCard = card;
+		if (reviewQueue.length === 0) {
+			commitHeldCard();
+			finishSession();
+		}
 	}
 
 	onMount(() => {
@@ -198,7 +265,8 @@
 	});
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} onpagehide={onPageHide} />
+<svelte:document onvisibilitychange={onVisibilityChange} />
 
 <svelte:head>
 	<title>Learn · WK Flash</title>
@@ -232,6 +300,9 @@
 				{/if}
 			</div>
 			<div class="session-actions">
+				{#if undoSnapshot}
+					<button class="finish-missed" type="button" onclick={undo}>Undo</button>
+				{/if}
 				<a href="/lessons"><button class="finish-missed" type="button">Exit</button></a>
 			</div>
 		</div>

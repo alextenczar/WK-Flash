@@ -21,6 +21,7 @@
 		showSrsChanges,
 		showTimeEstimate,
 		showUndoButton,
+		confirmLessonSecondPass,
 		type PrimarySortChoice,
 		type SortDirection,
 		type SortField
@@ -263,6 +264,19 @@
 			Local JLPT cards are stored and scheduled only on this device. They are never submitted to WaniKani.
 		</p>
 		<p class="muted">When prioritization is on, current-level items appear first, and the sort applies within each group. The secondary sort orders cards that tie on the primary sort. Changes apply to new queues and newly due items; saved sessions keep their current order.</p>
+	</section>
+
+	<section class="preferences" aria-labelledby="lesson-preferences-heading">
+		<h2 id="lesson-preferences-heading">Lessons</h2>
+		<label class="toggle">
+			<input
+				type="checkbox"
+				checked={$confirmLessonSecondPass}
+				onchange={(event) => confirmLessonSecondPass.set(event.currentTarget.checked)}
+			/>
+			Review each lesson again to confirm it before it starts
+		</label>
+		<p class="muted">When this is off, each item starts as soon as you move past it in the lesson.</p>
 	</section>
 
 	<section class="preferences">

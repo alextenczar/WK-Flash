@@ -26,6 +26,7 @@ export const showSrsChanges = persistentBoolean('wk-flash:show-srs-changes', tru
 export const showPartsOfSpeech = persistentBoolean('wk-flash:show-parts-of-speech', true);
 export const showTimeEstimate = persistentBoolean('wk-flash:show-time-estimate', true);
 export const showUndoButton = persistentBoolean('wk-flash:show-undo-button', false);
+export const confirmLessonSecondPass = persistentBoolean('wk-flash:confirm-lesson-second-pass', true);
 export const interweaveLocalN1Reviews = persistentBoolean(
 	'wk-flash:interweave-local-n1-reviews',
 	false
