@@ -590,11 +590,11 @@
 	}
 
 	.characters.multi {
-		font-size: 4rem;
+		font-size: 5.25rem;
 	}
 
 	.characters.long {
-		font-size: 2.75rem;
+		font-size: 4rem;
 	}
 
 	.characters {
@@ -812,11 +812,11 @@
 		}
 
 		.characters.multi {
-			font-size: 3rem;
+			font-size: 4rem;
 		}
 
 		.characters.long {
-			font-size: 2.25rem;
+			font-size: 3.25rem;
 		}
 
 		.card-actions {
