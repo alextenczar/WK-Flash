@@ -54,8 +54,8 @@
 		queueReviewSubmission,
 		recordSrsStageUpdate,
 		removeQueuedReviewSubmission,
+		releaseReviewSubmission,
 		syncPendingReviews,
-		submitQueuedReview,
 		type PendingReviewSubmission
 	} from '$lib/review-outbox';
 	import type { ReviewCard, WKSubject } from '$lib/wanikani/types';
@@ -486,8 +486,9 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	async function endReview() {
 		if (endingReview) return;
 		endingReview = true;
-		await commitPendingReview();
-		if (navigator.onLine) await syncPendingReviews($apiKey);
+		commitPendingReview();
+		// Queued answers keep sending in the background, so leaving the page does not wait for them.
+		if (navigator.onLine) void syncPendingReviews($apiKey);
 		if (navigator.onLine) clearReviewSession();
 		else saveCurrentSession();
 		await goto('/');
@@ -537,21 +538,18 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 		saveCurrentSession();
 	}
 
-	async function submitReview(review: PendingReviewSubmission) {
-		try {
-			await submitQueuedReview($apiKey, review);
-		} catch (e) {
-			if (e instanceof WaniKaniError) {
-				error = `${e.message} The result is saved and will retry when connected.`;
-			}
-		}
+	/** Saves a graded answer and sends it in the background, within WaniKani's request limit. */
+	function submitReview(review: PendingReviewSubmission) {
+		queueReviewSubmission(review);
+		void syncPendingReviews($apiKey);
 	}
 
-	async function commitPendingReview() {
+	/** Releases the held answer to send. Undo is no longer possible for it after this. */
+	function commitPendingReview() {
 		if (!pendingReviewSubmission) return;
 		const review = pendingReviewSubmission;
 		pendingReviewSubmission = null;
-		await submitReview(review);
+		void releaseReviewSubmission($apiKey, review.assignmentId);
 	}
 
 	async function grade(wasCorrect: boolean) {
@@ -611,7 +609,8 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 					});
 				}
 				if ($showUndoButton) {
-					queueReviewSubmission(reviewSubmission);
+					// Held until the undo window closes, so it is not sent yet.
+					queueReviewSubmission(reviewSubmission, { hold: true });
 					pendingReviewSubmission = reviewSubmission;
 				} else {
 					void submitReview(reviewSubmission);

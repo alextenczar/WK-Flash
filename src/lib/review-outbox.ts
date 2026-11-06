@@ -99,14 +99,19 @@ if (browser) {
 	});
 }
 
-export function queueReviewSubmission(review: PendingReviewSubmission): void {
+/** Answers held for undo. They stay queued but are not sent until released. */
+const heldAssignmentIds = new Set<number>();
+
+export function queueReviewSubmission(review: PendingReviewSubmission, options: { hold?: boolean } = {}): void {
 	pendingReviews.update((reviews) =>
 		reviews.some((item) => item.assignmentId === review.assignmentId) ? reviews : [...reviews, review]
 	);
+	if (options.hold) heldAssignmentIds.add(review.assignmentId);
 	void removeCachedReviewCard(review.assignmentId);
 }
 
 export function removeQueuedReviewSubmission(assignmentId: number): void {
+	heldAssignmentIds.delete(assignmentId);
 	pendingReviews.update((reviews) => reviews.filter((item) => item.assignmentId !== assignmentId));
 }
 
@@ -145,7 +150,6 @@ async function deferIfReviewIsNotAvailable(
 	return true;
 }
 
-let syncing = false;
 const inFlightAssignmentIds = new Set<number>();
 
 export async function submitQueuedReview(apiToken: string, review: PendingReviewSubmission) {
@@ -182,40 +186,85 @@ export async function submitQueuedReview(apiToken: string, review: PendingReview
 	}
 }
 
-export async function syncPendingReviews(apiToken: string): Promise<void> {
-	if (!browser || !navigator.onLine || !apiToken || syncing) return;
-	syncing = true;
-	try {
-		const queuedReviews = get(pendingReviews);
-		if (queuedReviews.length === 0) return;
+/**
+ * WaniKani allows 60 requests a minute per token. Review submissions are capped below that, so
+ * the other requests the app makes still have room.
+ */
+const SUBMISSION_WINDOW_MS = 60_000;
+const MAX_SUBMISSIONS_PER_WINDOW = 50;
+const RETRY_DELAY_MS = 30_000;
 
-		for (const review of queuedReviews) {
-			if (!navigator.onLine) break;
-			if (inFlightAssignmentIds.has(review.assignmentId)) continue;
-			inFlightAssignmentIds.add(review.assignmentId);
-			try {
-				await submitReview(
-					apiToken,
-					review.assignmentId,
-					review.incorrectCount,
-					review.needsReading
-				);
-			} catch (error: unknown) {
-				if (isCreatedAtError(error)) {
-					try {
-						if (await deferIfReviewIsNotAvailable(apiToken, review)) continue;
-					} catch (refreshError: unknown) {
-						console.warn(`Could not refresh WaniKani assignment ${review.assignmentId}.`, refreshError);
-					}
-				}
-				console.warn(`Could not sync queued WaniKani review for assignment ${review.assignmentId}.`, error);
-				break;
-			} finally {
-				inFlightAssignmentIds.delete(review.assignmentId);
-			}
-			removeQueuedReviewSubmission(review.assignmentId);
+const recentSubmissionTimes: number[] = [];
+let retryTimer: ReturnType<typeof setTimeout> | undefined;
+let activeQueue: Promise<void> | null = null;
+
+/** Waits until sending one more submission keeps the last minute under the cap. */
+async function reserveSubmissionSlot(): Promise<void> {
+	for (;;) {
+		const now = Date.now();
+		while (recentSubmissionTimes.length > 0 && now - recentSubmissionTimes[0] >= SUBMISSION_WINDOW_MS) {
+			recentSubmissionTimes.shift();
 		}
-	} finally {
-		syncing = false;
+		if (recentSubmissionTimes.length < MAX_SUBMISSIONS_PER_WINDOW) {
+			recentSubmissionTimes.push(now);
+			return;
+		}
+		const waitMs = recentSubmissionTimes[0] + SUBMISSION_WINDOW_MS - now;
+		await new Promise((resolve) => setTimeout(resolve, waitMs));
 	}
+}
+
+async function runSubmissionQueue(apiToken: string): Promise<void> {
+	// Reviews WaniKani has not accepted yet are skipped for this run and tried again later.
+	const deferred = new Set<number>();
+	while (navigator.onLine) {
+		const next = get(pendingReviews).find(
+			(review) => !heldAssignmentIds.has(review.assignmentId) && !deferred.has(review.assignmentId)
+		);
+		if (!next) break;
+		await reserveSubmissionSlot();
+		try {
+			await submitQueuedReview(apiToken, next);
+		} catch (error: unknown) {
+			console.warn(`Could not submit WaniKani review for assignment ${next.assignmentId}. It will retry.`, error);
+			break;
+		}
+		if (get(pendingReviews).some((review) => review.assignmentId === next.assignmentId)) {
+			deferred.add(next.assignmentId);
+		}
+	}
+
+	const hasUnheldReviews = get(pendingReviews).some((review) => !heldAssignmentIds.has(review.assignmentId));
+	if (hasUnheldReviews && navigator.onLine) {
+		retryTimer = setTimeout(() => {
+			retryTimer = undefined;
+			void scheduleReviewSubmissions(apiToken);
+		}, RETRY_DELAY_MS);
+	}
+}
+
+/**
+ * Sends queued answers in the background, within the request cap. Callers do not wait for the
+ * network. Returns the running queue so it can be awaited when needed.
+ */
+export function scheduleReviewSubmissions(apiToken: string): Promise<void> {
+	if (!browser || !apiToken) return Promise.resolve();
+	if (retryTimer !== undefined) {
+		clearTimeout(retryTimer);
+		retryTimer = undefined;
+	}
+	activeQueue ??= runSubmissionQueue(apiToken).finally(() => {
+		activeQueue = null;
+	});
+	return activeQueue;
+}
+
+/** Lets a held answer send, now that its undo window has closed. */
+export function releaseReviewSubmission(apiToken: string, assignmentId: number): Promise<void> {
+	heldAssignmentIds.delete(assignmentId);
+	return scheduleReviewSubmissions(apiToken);
+}
+
+export function syncPendingReviews(apiToken: string): Promise<void> {
+	return scheduleReviewSubmissions(apiToken);
 }
