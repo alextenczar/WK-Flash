@@ -263,7 +263,7 @@
 		<p class="muted">
 			Local JLPT cards are stored and scheduled only on this device. They are never submitted to WaniKani.
 		</p>
-		<p class="muted">When prioritization is on, current-level items appear first, and the sort applies within each group. The secondary sort orders cards that tie on the primary sort. Changes apply to new queues and newly due items; saved sessions keep their current order.</p>
+		<p class="muted">When prioritization is on, current-level items appear first, and the sort applies within each group. The secondary sort orders cards that tie on the primary sort, and cards that still tie are shuffled, so their order changes between sessions. Changes apply to new queues and newly due items; saved sessions keep their current order.</p>
 	</section>
 
 	<section class="preferences" aria-labelledby="lesson-preferences-heading">

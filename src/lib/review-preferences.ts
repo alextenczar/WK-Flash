@@ -207,6 +207,15 @@ function compareRule(rule: SortRule, left: ReviewCard, right: ReviewCard): numbe
 	return rule.direction === 'descending' ? -difference : difference;
 }
 
+function shuffleCards(cards: ReviewCard[]): ReviewCard[] {
+	const shuffled = [...cards];
+	for (let index = shuffled.length - 1; index > 0; index--) {
+		const otherIndex = Math.floor(Math.random() * (index + 1));
+		[shuffled[index], shuffled[otherIndex]] = [shuffled[otherIndex], shuffled[index]];
+	}
+	return shuffled;
+}
+
 export function sortReviewCards(
 	cards: ReviewCard[],
 	settings: ReviewSortSettings,
@@ -214,17 +223,15 @@ export function sortReviewCards(
 ): ReviewCard[] {
 	let sorted: ReviewCard[];
 	if (settings.primary === 'random') {
-		sorted = [...cards];
-		for (let index = sorted.length - 1; index > 0; index--) {
-			const otherIndex = Math.floor(Math.random() * (index + 1));
-			[sorted[index], sorted[otherIndex]] = [sorted[otherIndex], sorted[index]];
-		}
+		sorted = shuffleCards(cards);
 	} else if (settings.primary === 'default') {
 		sorted = [...cards];
 	} else {
 		const { primary, secondary } = settings;
-		// Array.prototype.sort is stable, so cards that tie on every rule keep WaniKani's order.
-		sorted = [...cards].sort((left, right) => {
+		// Shuffle first so cards that tie on every rule come out in a different order each time.
+		// Array.prototype.sort is stable, so the shuffled order survives within each tie group,
+		// while the rules still decide the order between groups.
+		sorted = shuffleCards(cards).sort((left, right) => {
 			const difference = compareRule(primary, left, right);
 			if (difference !== 0 || !secondary) return difference;
 			return compareRule(secondary, left, right);
