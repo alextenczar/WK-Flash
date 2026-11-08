@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
 	import { whenPersistentStorageReady } from '$lib/persistent-storage';
 	import { gamepadBindings, gamepadButtonLabel, keybindings, type Keybindings } from '$lib/keybindings';
@@ -19,7 +19,13 @@
 		reviewSortKey,
 		sortReviewCards
 	} from '$lib/review-preferences';
-	import { playPronunciation, reviewAudioSettings } from '$lib/review-audio';
+	import {
+		keepAudioAwake,
+		releaseAudioAwake,
+		playPronunciation,
+		prefetchPronunciation,
+		reviewAudioSettings
+	} from '$lib/review-audio';
 	import {
 		clearReviewSession,
 		readReviewSession,
@@ -93,6 +99,12 @@
 	let pendingReviewSubmission = $state<PendingReviewSubmission | null>(null);
 
 	const current = $derived(queue[0] ?? null);
+
+	// The card on screen and the next one can be answered with sound, so their clips are downloaded first.
+	$effect(() => {
+		prefetchPronunciation(queue[0]?.subject.data.pronunciation_audios?.[0]?.url);
+		prefetchPronunciation(queue[1]?.subject.data.pronunciation_audios?.[0]?.url);
+	});
 	const averageResponseTimeMs = $derived(responseTimeSamples > 0 ? responseTimeTotalMs / responseTimeSamples : null);
 	const estimatedRemainingReviewCount = $derived.by(() => {
 		const successRate = (completedCount + 9) / (completedCount + wrongAnswerCount + 10);
@@ -450,11 +462,17 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 	}
 
 	function onVisibilityChange() {
-		if (document.visibilityState === 'hidden') onPageHide();
+		if (document.visibilityState === 'hidden') {
+			releaseAudioAwake();
+			onPageHide();
+		}
 	}
+
+	onDestroy(releaseAudioAwake);
 
 	function flip() {
 		flipped = true;
+		keepAudioAwake();
 		saveCurrentSession();
 	}
 
@@ -554,6 +572,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 
 	async function grade(wasCorrect: boolean) {
 		if (!current || endingReview) return;
+		keepAudioAwake();
 		void commitPendingReview();
 		undoSnapshot = $showUndoButton ? createUndoSnapshot() : null;
 		error = '';

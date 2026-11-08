@@ -329,6 +329,15 @@
 			/>
 			Play pronunciation after answering a review or revealing a lesson
 		</label>
+		<label class="toggle">
+			<input
+				type="checkbox"
+				checked={$reviewAudioSettings.keepAudioAwake}
+				onchange={(event) => reviewAudioSettings.update({ keepAudioAwake: event.currentTarget.checked })}
+			/>
+			Keep headphones awake during reviews
+		</label>
+		<p class="muted audio-note">Plays silence while you review, so headphones skip the wake-up delay before each sound. Uses some extra battery.</p>
 		<label class="volume-setting" for="audio-volume">
 			<span>Pronunciation volume</span>
 			<span class="volume-value">{Math.round($reviewAudioSettings.volume * 100)}%</span>
