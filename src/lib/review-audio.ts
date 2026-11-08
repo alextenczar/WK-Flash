@@ -54,9 +54,11 @@ export function prefetchPronunciation(url: string | undefined): void {
 	if (!browser || !url || clipRequests.has(url)) return;
 	const request = fetch(url, { cache: 'force-cache' })
 		.then(async (response) => {
-			if (!response.ok) return;
+			const contentType = response.headers.get('content-type') ?? '';
+			// Only keep real audio. An error page cached here would fail to play.
+			if (!response.ok || !contentType.startsWith('audio/')) return;
 			const blob = await response.blob();
-			readyClips.set(url, URL.createObjectURL(blob));
+			readyClips.set(url, URL.createObjectURL(new Blob([blob], { type: contentType })));
 			trimClipCache();
 		})
 		.catch(() => {
@@ -84,10 +86,27 @@ export function playPronunciation(url: string | undefined, volume: number): Prom
 	currentPlayer?.pause();
 	const audioSession = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
 	if (audioSession) audioSession.type = 'ambient';
-	const player = new Audio(readyClips.get(url) ?? url);
+	const ready = readyClips.get(url);
+	const player = new Audio(ready ?? url);
 	player.volume = Math.min(1, Math.max(0, volume));
 	currentPlayer = player;
-	return player.play().then(() => true).catch(() => false);
+	return player.play().then(
+		() => true,
+		() => {
+			if (!ready) return false;
+			// The downloaded copy would not play (some phones reject blob audio), so use the original link.
+			URL.revokeObjectURL(ready);
+			readyClips.delete(url);
+			clipRequests.delete(url);
+			const fallback = new Audio(url);
+			fallback.volume = player.volume;
+			currentPlayer = fallback;
+			return fallback.play().then(
+				() => true,
+				() => false
+			);
+		}
+	);
 }
 
 export const reviewAudioSettings = {
