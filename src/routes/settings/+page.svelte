@@ -345,7 +345,7 @@
 		<p class="muted audio-note">Plays silence while you review, so headphones skip the wake-up delay before each sound. Uses some extra battery.</p>
 		<label class="volume-setting" for="audio-volume">
 			<span>Pronunciation volume</span>
-			<span class="volume-value">{Math.round($reviewAudioSettings.volume * 100)}%</span>
+			<span class="volume-value">{Math.round(sliderFromVolume($reviewAudioSettings.volume))}%</span>
 			<input
 				id="audio-volume"
 				type="range"
