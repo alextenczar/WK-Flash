@@ -27,7 +27,12 @@
 		type SortField
 	} from '$lib/review-preferences';
 	import { clearReviewSession } from '$lib/review-session';
-	import { reviewAudioSettings } from '$lib/review-audio';
+	import {
+		SLIDER_MAX,
+		reviewAudioSettings,
+		sliderFromVolume,
+		volumeFromSlider
+	} from '$lib/review-audio';
 	import { theme, type ThemeMode } from '$lib/theme';
 	import { clearCachedReviewQueue, getUser, WaniKaniError } from '$lib/wanikani/api';
 
@@ -345,10 +350,11 @@
 				id="audio-volume"
 				type="range"
 				min="0"
-				max="2"
-				step="0.05"
-				value={$reviewAudioSettings.volume}
-				oninput={(event) => reviewAudioSettings.update({ volume: Number(event.currentTarget.value) })}
+				max={SLIDER_MAX}
+				step="1"
+				value={sliderFromVolume($reviewAudioSettings.volume)}
+				oninput={(event) =>
+					reviewAudioSettings.update({ volume: volumeFromSlider(Number(event.currentTarget.value)) })}
 			/>
 		</label>
 		<p class="muted audio-note">On iPhone, audio may not play while Silent mode is on.</p>

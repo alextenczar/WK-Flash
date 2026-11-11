@@ -4,11 +4,25 @@ import { onPersistentHydrate, readPersistent, writePersistent } from '$lib/persi
 
 const STORAGE_KEY = 'wk-flash:audio-settings';
 /** Volume multiplier. 1 is the clip's normal level; values above 1 boost it through Web Audio. */
-const MAX_VOLUME = 2;
+const MAX_VOLUME = 4;
+/** Slider positions run 0–200. 0–100 maps to 0–100% volume; 100–200 maps linearly to 100–400%. */
+export const SLIDER_MAX = 200;
 const defaults: ReviewAudioSettings = { autoplayAfterAnswer: false, volume: 1.5, keepAudioAwake: false };
 
 function clampVolume(volume: number): number {
 	return Math.min(MAX_VOLUME, Math.max(0, volume));
+}
+
+/** Converts a slider position (0–200) to a volume multiplier (0–4). */
+export function volumeFromSlider(position: number): number {
+	const p = Math.min(SLIDER_MAX, Math.max(0, position));
+	return clampVolume(p <= 100 ? p / 100 : 1 + ((p - 100) * 3) / 100);
+}
+
+/** Converts a volume multiplier (0–4) back to a slider position (0–200). */
+export function sliderFromVolume(volume: number): number {
+	const v = clampVolume(volume);
+	return v <= 1 ? v * 100 : 100 + ((v - 1) * 100) / 3;
 }
 
 export interface ReviewAudioSettings {
