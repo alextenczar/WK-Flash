@@ -345,7 +345,7 @@
 				id="audio-volume"
 				type="range"
 				min="0"
-				max="1"
+				max="2"
 				step="0.05"
 				value={$reviewAudioSettings.volume}
 				oninput={(event) => reviewAudioSettings.update({ volume: Number(event.currentTarget.value) })}

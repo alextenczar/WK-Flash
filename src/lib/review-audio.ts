@@ -3,7 +3,13 @@ import { get, writable } from 'svelte/store';
 import { onPersistentHydrate, readPersistent, writePersistent } from '$lib/persistent-storage';
 
 const STORAGE_KEY = 'wk-flash:audio-settings';
-const defaults: ReviewAudioSettings = { autoplayAfterAnswer: false, volume: 0.7, keepAudioAwake: false };
+/** Volume multiplier. 1 is the clip's normal level; values above 1 boost it through Web Audio. */
+const MAX_VOLUME = 2;
+const defaults: ReviewAudioSettings = { autoplayAfterAnswer: false, volume: 1.5, keepAudioAwake: false };
+
+function clampVolume(volume: number): number {
+	return Math.min(MAX_VOLUME, Math.max(0, volume));
+}
 
 export interface ReviewAudioSettings {
 	autoplayAfterAnswer: boolean;
@@ -24,7 +30,7 @@ function loadSettings(): ReviewAudioSettings {
 					: defaults.autoplayAfterAnswer,
 			volume:
 				typeof stored.volume === 'number' && Number.isFinite(stored.volume)
-					? Math.min(1, Math.max(0, stored.volume))
+					? clampVolume(stored.volume)
 					: defaults.volume,
 			keepAudioAwake:
 				typeof stored.keepAudioAwake === 'boolean' ? stored.keepAudioAwake : defaults.keepAudioAwake
@@ -86,20 +92,22 @@ export function playPronunciation(url: string | undefined, volume: number): Prom
 	currentPlayer?.pause();
 	const audioSession = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
 	if (audioSession) audioSession.type = 'ambient';
+	const level = clampVolume(volume);
 	const ready = readyClips.get(url);
-	const player = new Audio(ready ?? url);
-	player.volume = Math.min(1, Math.max(0, volume));
+	const player = createPlayer(ready ?? url, level, ready !== undefined);
 	currentPlayer = player;
 	return player.play().then(
 		() => true,
 		() => {
-			if (!ready) return false;
-			// The downloaded copy would not play (some phones reject blob audio), so use the original link.
-			URL.revokeObjectURL(ready);
-			readyClips.delete(url);
-			clipRequests.delete(url);
-			const fallback = new Audio(url);
-			fallback.volume = player.volume;
+			// Only retry when there is something different to try: a downloaded copy that would not play
+			// (some phones reject blob audio), or a boosted remote request that the CDN refused (no CORS).
+			if (!ready && level <= 1) return false;
+			if (ready) {
+				URL.revokeObjectURL(ready);
+				readyClips.delete(url);
+				clipRequests.delete(url);
+			}
+			const fallback = createPlayer(url, Math.min(1, level), false);
 			currentPlayer = fallback;
 			return fallback.play().then(
 				() => true,
@@ -107,6 +115,60 @@ export function playPronunciation(url: string | undefined, volume: number): Prom
 			);
 		}
 	);
+}
+
+let sharedContext: AudioContext | null = null;
+
+/**
+ * Creates an element for a clip. Levels above 1 are routed through Web Audio, since an element's own
+ * volume cannot go past 1. Remote clips need CORS for Web Audio to read them; without it the output is silent.
+ */
+function createPlayer(source: string, level: number, sameOrigin: boolean): HTMLAudioElement {
+	const player = new Audio();
+	if (level > 1 && !sameOrigin) player.crossOrigin = 'anonymous';
+	player.src = source;
+	if (level <= 1 || !boostOutput(player, level)) player.volume = Math.min(1, level);
+	return player;
+}
+
+/** Sends the element through a gain stage and a light limiter. Returns false if Web Audio is unavailable. */
+function boostOutput(player: HTMLAudioElement, level: number): boolean {
+	try {
+		if (!sharedContext) {
+			const AudioContextCtor =
+				window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+			if (!AudioContextCtor) return false;
+			sharedContext = new AudioContextCtor();
+		}
+		const context = sharedContext;
+		// Must run inside the user gesture that starts playback, or iOS leaves the context suspended.
+		void context.resume();
+
+		const source = context.createMediaElementSource(player);
+		const gain = context.createGain();
+		gain.gain.value = level;
+		// Stops boosted peaks from clipping harshly. It only acts on loud peaks, so normal clips are unchanged.
+		const limiter = context.createDynamicsCompressor();
+		limiter.threshold.value = -1;
+		limiter.knee.value = 0;
+		limiter.ratio.value = 20;
+		limiter.attack.value = 0.003;
+		limiter.release.value = 0.1;
+		source.connect(gain).connect(limiter).connect(context.destination);
+
+		player.addEventListener(
+			'ended',
+			() => {
+				source.disconnect();
+				gain.disconnect();
+				limiter.disconnect();
+			},
+			{ once: true }
+		);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 export const reviewAudioSettings = {
@@ -119,7 +181,7 @@ export const reviewAudioSettings = {
 				...patch,
 				volume:
 					typeof patch.volume === 'number' && Number.isFinite(patch.volume)
-						? Math.min(1, Math.max(0, patch.volume))
+						? clampVolume(patch.volume)
 						: current.volume
 			};
 			return next;
