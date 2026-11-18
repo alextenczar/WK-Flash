@@ -11,7 +11,7 @@
 </script>
 
 <svelte:head>
-	<title>{notFound ? 'Page not found' : 'Error'} · WKFlash</title>
+	<title>{notFound ? 'Page not found' : 'Error'} · WK Flash</title>
 </svelte:head>
 
 <section class="error-page" aria-labelledby="error-heading">

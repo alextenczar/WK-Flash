@@ -11,7 +11,7 @@
 	);
 </script>
 
-<Seo title={`${detail.character} · ${detail.meaning} · JLPT ${detail.level} kanji · WKFlash`} {description} />
+<Seo title={`${detail.character} · ${detail.meaning} · JLPT ${detail.level} kanji · WK Flash`} {description} />
 
 <div class="container jlpt-page">
 	<a class="back-link" href={`/jlpt/${levelSlug(detail.level)}/kanji`}>← JLPT {detail.level} kanji</a>

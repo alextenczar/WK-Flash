@@ -718,7 +718,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 </script>
 
 <svelte:head>
-	<title>Review · WKFlash</title>
+	<title>Review · WK Flash</title>
 </svelte:head>
 
 <svelte:window onkeydown={handleKeydown} onpagehide={onPageHide} />

@@ -99,7 +99,7 @@
 </script>
 
 <svelte:head>
-	<title>{subject ? `${subject.data.characters ?? subject.data.slug} · WKFlash` : 'Item · WKFlash'}</title>
+	<title>{subject ? `${subject.data.characters ?? subject.data.slug} · WK Flash` : 'Item · WK Flash'}</title>
 </svelte:head>
 
 <div class="container item-container">

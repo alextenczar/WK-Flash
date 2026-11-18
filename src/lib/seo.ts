@@ -1,8 +1,8 @@
 import { env } from '$env/dynamic/public';
 
-export const siteName = 'WKFlash';
+export const siteName = 'WK Flash';
 
-export const defaultTitle = 'WKFlash | Faster unofficial WaniKani reviews';
+export const defaultTitle = 'WK Flash | Faster unofficial WaniKani reviews';
 
 export const defaultDescription =
 	'WK Flash is an unofficial WaniKani study app that combines meaning and reading on one card, with keyboard-fast reviews, controller support, and JLPT analytics.';

@@ -292,7 +292,7 @@
 </script>
 
 <svelte:head>
-	<title>Analytics | WKFlash</title>
+	<title>Analytics | WK Flash</title>
 	<meta name="description" content="Track your WaniKani kanji and vocabulary progress across JLPT levels." />
 </svelte:head>
 

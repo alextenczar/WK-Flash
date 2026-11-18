@@ -134,7 +134,7 @@
 </script>
 
 <svelte:head>
-	<title>Kanji Heatmap · WKFlash</title>
+	<title>Kanji Heatmap · WK Flash</title>
 	<meta name="description" content="Explore JLPT kanji progress as an ordered heatmap." />
 </svelte:head>
 

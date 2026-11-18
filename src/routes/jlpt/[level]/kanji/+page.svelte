@@ -11,7 +11,7 @@
 	);
 </script>
 
-<Seo title={`JLPT ${level} kanji · WKFlash`} {description} />
+<Seo title={`JLPT ${level} kanji · WK Flash`} {description} />
 
 <header class="page-heading">
 	<h1>JLPT {level} kanji</h1>
