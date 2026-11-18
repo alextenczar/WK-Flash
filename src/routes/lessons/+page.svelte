@@ -93,7 +93,7 @@
 </script>
 
 <svelte:head>
-	<title>Lessons · WK Flash</title>
+	<title>Lessons · WKFlash</title>
 </svelte:head>
 
 <div class="container lessons-container">

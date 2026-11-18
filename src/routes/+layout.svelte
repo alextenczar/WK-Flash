@@ -5,7 +5,7 @@
 	import { initPersistentStorage } from '$lib/persistent-storage';
 	// Applies the saved light/dark theme to <html> on every page.
 	import '$lib/theme';
-	import { isPublicPath } from '$lib/seo';
+	import { isPublicPath, siteName } from '$lib/seo';
 	import { apiKey } from '$lib/storage';
 	import { syncPendingLessonStarts } from '$lib/lesson-outbox';
 	import { pendingReviews, syncPendingReviews } from '$lib/review-outbox';
@@ -49,8 +49,10 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href="/wk-flash-icon.svg" />
+	<link rel="icon" href="/wk-flash-icon.svg" type="image/svg+xml" />
+	<link rel="icon" href="/favicon-96x96.png" type="image/png" sizes="96x96" />
 	<link rel="manifest" href="/manifest.webmanifest" />
+	<meta name="application-name" content={siteName} />
 	<link rel="apple-touch-icon" href="/wk-flash-icon.svg" />
 	<meta name="theme-color" content="#000000" />
 	<meta name="apple-mobile-web-app-capable" content="yes" />

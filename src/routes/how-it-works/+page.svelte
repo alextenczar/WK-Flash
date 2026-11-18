@@ -190,7 +190,7 @@
 <svelte:window onscroll={updateProgress} onresize={updateProgress} />
 
 <Seo
-	title="How WK Flash works · Unofficial WaniKani study app"
+	title="How WKFlash works · Unofficial WaniKani study app"
 	description="How WK Flash works, step by step: connect your WaniKani token, build your review queue, answer one card for meaning and reading, sync results, and track JLPT progress."
 />
 

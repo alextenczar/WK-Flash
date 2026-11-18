@@ -142,7 +142,7 @@
 </script>
 
 <svelte:head>
-	<title>Settings · WK Flash</title>
+	<title>Settings · WKFlash</title>
 </svelte:head>
 
 <div class="container">

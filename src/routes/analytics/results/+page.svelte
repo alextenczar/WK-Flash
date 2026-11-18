@@ -200,7 +200,7 @@
 </script>
 
 <svelte:head>
-	<title>{isAllLevels ? `${resultType === 'kanji' ? 'Kanji' : 'Vocabulary'} · All JLPT Levels` : `JLPT ${selectedLevel} ${resultType === 'kanji' ? 'Kanji' : 'Vocabulary'}`} | WK Flash</title>
+	<title>{isAllLevels ? `${resultType === 'kanji' ? 'Kanji' : 'Vocabulary'} · All JLPT Levels` : `JLPT ${selectedLevel} ${resultType === 'kanji' ? 'Kanji' : 'Vocabulary'}`} | WKFlash</title>
 	<meta name="description" content={isAllLevels ? `${resultType} progress results across all JLPT levels.` : `JLPT ${selectedLevel} ${resultType} progress results.`} />
 </svelte:head>
 

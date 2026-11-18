@@ -3,7 +3,7 @@
 	import { aboutDescription } from '$lib/seo';
 </script>
 
-<Seo title="About WK Flash | Unofficial WaniKani study app" description={aboutDescription} />
+<Seo title="About WKFlash | Unofficial WaniKani study app" description={aboutDescription} />
 
 <div class="container about-content">
 	<h1>About WK Flash</h1>

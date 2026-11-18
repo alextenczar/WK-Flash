@@ -6,7 +6,7 @@
 </script>
 
 <Seo
-	title="JLPT kanji and vocabulary by level · WK Flash"
+	title="JLPT kanji and vocabulary by level · WKFlash"
 	description="Browse JLPT N5 to N1 kanji and vocabulary with meanings and readings. Free, no account needed."
 />
 

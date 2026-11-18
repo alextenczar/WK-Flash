@@ -69,7 +69,7 @@
 	});
 </script>
 
-<Seo title="JLPT Coverage · WK Flash" description="See how JLPT kanji are distributed across WaniKani levels." />
+<Seo title="JLPT Coverage · WKFlash" description="See how JLPT kanji are distributed across WaniKani levels." />
 
 <div class="container coverage-page">
 	<a class="back-link" href="/">← Back to home</a>

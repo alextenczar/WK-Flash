@@ -1,13 +1,24 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { absoluteUrl, defaultDescription, isPublicPath, siteName, siteOrigin } from '$lib/seo';
+	import {
+		absoluteUrl,
+		defaultDescription,
+		isPublicPath,
+		jsonLdScript,
+		siteName,
+		siteOrigin,
+		webSiteJsonLd
+	} from '$lib/seo';
 
 	let {
 		title,
-		description = defaultDescription
+		description = defaultDescription,
+		includeWebSite = false
 	}: {
 		title: string;
 		description?: string;
+		/** Emit WebSite JSON-LD. Only the homepage sets this so the structured data appears once. */
+		includeWebSite?: boolean;
 	} = $props();
 
 	const path = $derived(page.url.pathname);
@@ -33,4 +44,7 @@
 	<meta name="twitter:title" content={title} />
 	<meta name="twitter:description" content={description} />
 	<meta name="twitter:image" content={image} />
+	{#if includeWebSite}
+		{@html jsonLdScript(webSiteJsonLd(origin))}
+	{/if}
 </svelte:head>

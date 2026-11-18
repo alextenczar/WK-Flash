@@ -379,8 +379,9 @@
 <svelte:window onclick={dismissItemPopup} onpointerdown={rememberPointerType} />
 
 <Seo
-	title={$apiKey && clientReady ? 'Home · WK Flash' : defaultTitle}
+	title={$apiKey && clientReady ? 'Home · WKFlash' : defaultTitle}
 	description={defaultDescription}
+	includeWebSite
 />
 
 {#if !clientReady || !$apiKey}

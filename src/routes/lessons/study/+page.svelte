@@ -266,7 +266,7 @@
 <svelte:document onvisibilitychange={onVisibilityChange} />
 
 <svelte:head>
-	<title>Learn · WK Flash</title>
+	<title>Learn · WKFlash</title>
 </svelte:head>
 
 <div class="container study-container">

@@ -10,7 +10,7 @@
 </script>
 
 <svelte:head>
-	<title>JLPT {level} vocabulary · WK Flash</title>
+	<title>JLPT {level} vocabulary · WKFlash</title>
 	<meta name="description" content={description} />
 </svelte:head>
 

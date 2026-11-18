@@ -1,8 +1,8 @@
 import { env } from '$env/dynamic/public';
 
-export const siteName = 'WK Flash';
+export const siteName = 'WKFlash';
 
-export const defaultTitle = 'WK Flash | Faster unofficial WaniKani reviews';
+export const defaultTitle = 'WKFlash | Faster unofficial WaniKani reviews';
 
 export const defaultDescription =
 	'WK Flash is an unofficial WaniKani study app that combines meaning and reading on one card, with keyboard-fast reviews, controller support, and JLPT analytics.';
@@ -35,6 +35,24 @@ export function siteOrigin(requestOrigin: string): string {
 
 export function absoluteUrl(origin: string, pathname: string): string {
 	return new URL(pathname, origin).href;
+}
+
+/** Schema.org WebSite data. Only the homepage renders it (via `includeWebSite` in Seo.svelte), so it appears once. */
+export function webSiteJsonLd(origin: string) {
+	return {
+		'@context': 'https://schema.org',
+		'@type': 'WebSite',
+		name: siteName,
+		alternateName: siteName,
+		url: absoluteUrl(origin, '/'),
+		description: defaultDescription
+	};
+}
+
+/** Serializes JSON-LD for a <script type="application/ld+json"> tag, escaping "<" so the payload cannot close the tag. */
+export function jsonLdScript(data: unknown): string {
+	const json = JSON.stringify(data).replace(/</g, '\\u003c');
+	return `<script type="application/ld+json">${json}</script>`;
 }
 
 export function webAppJsonLd(origin: string) {
