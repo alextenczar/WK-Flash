@@ -28,6 +28,7 @@
 	} from '$lib/review-audio';
 	import {
 		clearReviewSession,
+		isReviewSessionStale,
 		readReviewSession,
 		saveReviewSession,
 		type ReviewUndoSnapshot
@@ -82,6 +83,8 @@
 	let queue = $state<ReviewCard[]>([]);
 	/** The sort settings the current queue was ordered with. */
 	let queueSortKey: string | null = null;
+	/** When the current review began, so a saved review can be scrapped once it is too old. */
+	let sessionStartedAt: number | undefined;
 	let totalUnique = $state(0);
 	let knownAssignmentIds = new Set<number>();
 	let pendingIds = $state(new Set<number>());
@@ -196,6 +199,7 @@
 		}
 		saveReviewSession({
 			version: 1,
+			startedAt: sessionStartedAt,
 			queue,
 			totalUnique,
 			knownAssignmentIds: [...knownAssignmentIds],
@@ -229,6 +233,14 @@
 	function restoreReviewSession(): boolean {
 		const saved = readReviewSession();
 		if (!saved || saved.queue.length === 0) return false;
+		if (isReviewSessionStale(saved)) {
+			// Too old to resume while online. An answer still in its undo window is released so it is not lost.
+			if (saved.pendingReviewSubmission) {
+				void releaseReviewSubmission($apiKey, saved.pendingReviewSubmission.assignmentId);
+			}
+			clearReviewSession();
+			return false;
+		}
 
 		const currentSortKey = reviewSortKey($reviewSort, $prioritizeCurrentLevel);
 		// Sessions saved before sort keys existed are treated as current, since their order is unknown.
@@ -258,6 +270,8 @@
 		// An undo snapshot holds the old order, so undoing after a re-sort would bring that order back.
 		undoSnapshot = sortChanged ? null : (saved.undoSnapshot ?? null);
 		pendingReviewSubmission = saved.pendingReviewSubmission ?? null;
+		// A session saved before start times existed gets its window from this resume.
+		sessionStartedAt = saved.startedAt ?? Date.now();
 		phase = 'question';
 		questionStartedAt = performance.now();
 		saveCurrentSession();
@@ -404,6 +418,7 @@ async function getAvailableReviewQueue(): Promise<ReviewCard[]> {
 				return;
 			}
 			queue = cards;
+			sessionStartedAt = Date.now();
 			queueSortKey = reviewSortKey($reviewSort, $prioritizeCurrentLevel);
 			totalUnique = queue.length;
 			knownAssignmentIds = new Set(queue.map((card) => card.assignmentId));
