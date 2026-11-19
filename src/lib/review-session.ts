@@ -1,7 +1,7 @@
 import { browser } from '$app/environment';
 import { readPersistent, removePersistent, writePersistent } from '$lib/persistent-storage';
 import type { ReviewCard } from '$lib/wanikani/types';
-import type { PendingReviewSubmission } from '$lib/review-outbox';
+import { releaseReviewSubmission, type PendingReviewSubmission } from '$lib/review-outbox';
 import type { LocalReviewProgress } from '$lib/local-n1-reviews';
 
 const STORAGE_KEY = 'wk-flash:active-review';
@@ -71,24 +71,39 @@ export function readReviewSession(): ReviewSessionSnapshot | null {
 }
 
 /**
- * True when the saved review should be scrapped instead of resumed: it started more than
- * `MAX_REVIEW_SESSION_AGE_MS` ago and the device is online. Offline, the saved review is kept,
- * since it may hold answers that have not synced yet.
+ * True when the saved review must be discarded rather than resumed: the device is online and the
+ * review started more than `MAX_REVIEW_SESSION_AGE_MS` ago. A session with no start time (saved before
+ * start times were recorded) cannot be shown to be recent, so it is treated as stale too.
+ *
+ * Offline, the saved review is always kept. The queue for an offline session comes from the saved
+ * review, so discarding it would leave the user unable to complete reviews until they reconnect.
  */
 export function isReviewSessionStale(session: { startedAt?: number }, now = Date.now()): boolean {
 	if (!browser || !navigator.onLine) return false;
-	return session.startedAt !== undefined && now - session.startedAt > MAX_REVIEW_SESSION_AGE_MS;
+	if (session.startedAt === undefined) return true;
+	return now - session.startedAt > MAX_REVIEW_SESSION_AGE_MS;
 }
 
-export function hasSavedReviewSession(): boolean {
+/**
+ * Decides whether the homepage should offer to resume the saved review. While online, a stale review
+ * is cleared here so it is removed from storage. Offline it is kept and remains resumable.
+ */
+export function hasResumableReviewSession(apiToken: string): boolean {
 	const stored = readPersistent(STORAGE_KEY);
 	if (!stored) return false;
 	try {
-		if (isReviewSessionStale(JSON.parse(stored) as { startedAt?: number })) return false;
+		const session = JSON.parse(stored) as { startedAt?: number; pendingReviewSubmission?: PendingReviewSubmission | null };
+		if (!isReviewSessionStale(session)) return true;
+		// An answer still held for undo would otherwise stay held. Releasing it lets it sync.
+		if (session.pendingReviewSubmission) {
+			void releaseReviewSubmission(apiToken, session.pendingReviewSubmission.assignmentId);
+		}
+		clearReviewSession();
+		return false;
 	} catch {
-		// Unreadable data is handled when the review page opens it.
+		// Unreadable data is cleared when the review page opens it.
+		return true;
 	}
-	return true;
 }
 
 export function saveReviewSession(session: ReviewSessionSnapshot): void {

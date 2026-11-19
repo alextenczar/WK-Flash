@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { apiKey } from '$lib/storage';
 	import { readPersistent, writePersistent, whenPersistentStorageReady } from '$lib/persistent-storage';
-	import { hasSavedReviewSession } from '$lib/review-session';
+	import { hasResumableReviewSession } from '$lib/review-session';
 	import LandingPage from '$lib/components/LandingPage.svelte';
 	import Seo from '$lib/components/Seo.svelte';
 	import { defaultDescription, defaultTitle } from '$lib/seo';
@@ -182,7 +182,8 @@
 		window.addEventListener('online', handleOnline);
 		void (async () => {
 			await whenPersistentStorageReady();
-			hasSavedReview = hasSavedReviewSession();
+			// Runs on every visit, so a review older than the limit is cleared before the resume option is shown.
+			hasSavedReview = hasResumableReviewSession($apiKey);
 			const storedCount = readPersistent(REVIEW_COUNT_KEY);
 			if (storedCount !== null) {
 				const cachedCount = Number(storedCount);

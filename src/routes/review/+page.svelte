@@ -270,7 +270,7 @@
 		// An undo snapshot holds the old order, so undoing after a re-sort would bring that order back.
 		undoSnapshot = sortChanged ? null : (saved.undoSnapshot ?? null);
 		pendingReviewSubmission = saved.pendingReviewSubmission ?? null;
-		// A session saved before start times existed gets its window from this resume.
+		// Stale sessions (including ones with no start time) are discarded above, so startedAt is set here.
 		sessionStartedAt = saved.startedAt ?? Date.now();
 		phase = 'question';
 		questionStartedAt = performance.now();
